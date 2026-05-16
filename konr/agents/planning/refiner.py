@@ -41,6 +41,7 @@ class Refiner(SingleCallLLMAgent):
         phase_outcomes: list[TaskOutcome],
         remaining: list[Task],
     ) -> list[Task]:
+        """Return an updated task list adjusted to phase findings. Falls back to the original list on parse failure."""
         if not remaining:
             return remaining
 
@@ -57,6 +58,7 @@ class Refiner(SingleCallLLMAgent):
 
 
 def _get_findings_summary(db: FindingsDB, engagement_id: int) -> str:
+    """Produce a short text summary of current hosts and vulns for the refiner prompt."""
     try:
         hosts = db.get_hosts(engagement_id)
         vulns = db.get_vulnerabilities(engagement_id)
@@ -82,6 +84,7 @@ def _build_user_message(
     remaining: list[Task],
     findings_summary: str,
 ) -> str:
+    """Build the refiner prompt with completed outcomes, current findings, and the task list to adapt."""
     completed_section = json.dumps(
         [
             {
@@ -120,7 +123,7 @@ def _build_user_message(
 
 
 def _parse_tasks(raw: str) -> list[Task]:
-    """Parse LLM output into Tasks. No recon injection — that's Generator-only logic."""
+    """Parse LLM JSON output into Task objects. Does not enforce a recon guarantee — that's Generator's job."""
     data = _extract_json(raw)
     raw_tasks: list[dict] = data.get("tasks", [])
     tasks: list[Task] = []

@@ -38,6 +38,7 @@ class SingleCallLLMAgent:
     """Base for agents that make a single LLM call and return text. No tool loop."""
 
     def __init__(self, model: str, system_prompt: str) -> None:
+        """Store the Anthropic client and pre-build the cached system block."""
         self._client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
         self._model = model
         self._default_system: list[dict[str, Any]] = [
@@ -50,6 +51,7 @@ class SingleCallLLMAgent:
         max_tokens: int = 2048,
         system: list[dict[str, Any]] | None = None,
     ) -> str:
+        """Make a single API call and return the text response. Pass system to override the default."""
         sys = system or self._default_system
         response = await asyncio.to_thread(
             _llm_call, self._client, self._model, sys, max_tokens, user_message

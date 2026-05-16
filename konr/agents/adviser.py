@@ -26,6 +26,7 @@ class Adviser(SingleCallLLMAgent):
         recent_calls: list[tuple[str, dict]],
         findings_summary: str = "",
     ) -> str:
+        """Generate a single actionable suggestion for an agent that has repeated the same tool call."""
         user_message = _build_user_message(agent_name, task, recent_calls, findings_summary)
         return await self._call(user_message, max_tokens=256)
 
@@ -36,6 +37,7 @@ def _build_user_message(
     recent_calls: list[tuple[str, dict]],
     findings_summary: str,
 ) -> str:
+    """Format the adviser prompt with agent context and repeated call history."""
     parts = [
         f"Agent: {agent_name}",
         f"Task: {task}",

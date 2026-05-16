@@ -21,6 +21,7 @@ class OsintAgent(BaseAgent):
     model = config.HAIKU_MODEL
 
     def system_prompt(self) -> str:
+        """Return the OSINT specialist system prompt covering passive intel gathering from public sources."""
         return """You are a passive OSINT intelligence agent running inside a pentest container.
 Gather publicly available information about the target. Do NOT run active scanners
 (no nmap, masscan, or direct port probes) — those belong to the recon agent.

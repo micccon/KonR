@@ -16,6 +16,7 @@ class CoderAgent(BaseAgent):
     name = "coder"
 
     def system_prompt(self) -> str:
+        """Return the coder specialist system prompt covering exploit writing, explanation, and gated execution."""
         return """You are a security code writer running inside a Docker container.
 You are spawned by another agent that needs a custom exploit, payload, or script.
 

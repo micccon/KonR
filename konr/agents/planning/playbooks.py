@@ -74,7 +74,13 @@ FULL_PENTEST = TaskPlan(engagement_id=0, mode="pentest", tasks=[
 
 
 def select_playbook(mode: str, target_scope: str) -> TaskPlan | None:
-    """Return a playbook template or None to fall back to LLM generation."""
+    """Return a playbook template or None to fall back to LLM generation.
+
+    Heuristics for pentest mode:
+    - AD keywords in scope string → AD_PENTEST
+    - Bare IP or CIDR (no domain name) → EXTERNAL_NETWORK
+    - Otherwise (hostname/domain) → WEB_PENTEST
+    """
     is_ip = bool(re.match(r"^\d{1,3}(\.\d{1,3}){3}(/\d+)?$", target_scope.strip()))
     if mode == "ctf":
         return CTF
@@ -89,6 +95,6 @@ def select_playbook(mode: str, target_scope: str) -> TaskPlan | None:
 
 
 def apply_target(plan: TaskPlan, engagement_id: int, target: str, mode: str) -> TaskPlan:
-    """Substitute {{target}} placeholder and set engagement_id and mode."""
+    """Clone a playbook template with the real target substituted and engagement metadata set."""
     tasks = [replace(t, target=target) for t in plan.tasks]
     return replace(plan, engagement_id=engagement_id, tasks=tasks, mode=mode)

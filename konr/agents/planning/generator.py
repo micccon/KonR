@@ -41,6 +41,7 @@ class TaskPlan:
     mode: str
 
     def by_phase(self) -> dict[int, list[Task]]:
+        """Group tasks by phase number, preserving task order within each phase."""
         phases: dict[int, list[Task]] = {}
         for task in self.tasks:
             phases.setdefault(task.phase, []).append(task)
@@ -99,6 +100,7 @@ class Generator(SingleCallLLMAgent):
         client_name: str = "",
         objectives: str = "",
     ) -> TaskPlan:
+        """Return a TaskPlan — from a playbook if one matches, otherwise from the LLM."""
         from konr.agents.planning.playbooks import apply_target, select_playbook
         playbook = select_playbook(mode, target_scope)
         if playbook is not None:
@@ -115,6 +117,7 @@ class Generator(SingleCallLLMAgent):
 def _build_user_message(
     target_scope: str, mode: str, client_name: str, objectives: str
 ) -> str:
+    """Assemble the LLM user message for plan generation."""
     task_cap = (
         "Generate at most 8 tasks total" if mode == "ctf"
         else "Generate at most 12 tasks total"
@@ -160,6 +163,7 @@ def _extract_json(text: str) -> dict[str, Any]:
 
 
 def _parse_and_validate(raw: str, engagement_id: int) -> list[Task]:
+    """Parse and validate LLM JSON output into Task objects, guaranteeing at least one recon task."""
     data = _extract_json(raw)
     raw_tasks: list[dict[str, Any]] = data.get("tasks", [])
 

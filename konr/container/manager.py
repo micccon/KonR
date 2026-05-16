@@ -16,6 +16,7 @@ class ContainerError(Exception):
 
 class ContainerManager:
     def __init__(self) -> None:
+        """Connect to the Docker daemon, raising ContainerError if unavailable."""
         try:
             self._client = docker.from_env()
         except docker.errors.DockerException as exc:
@@ -83,6 +84,7 @@ class ContainerManager:
         return self._container
 
     def stop(self) -> None:
+        """Stop the running container. Preserves it for inspection until remove() is called."""
         if self._container is None:
             return
         try:
@@ -110,6 +112,7 @@ class ContainerManager:
 
     @property
     def is_running(self) -> bool:
+        """Check Docker daemon for live container status (reloads from daemon each call)."""
         if self._container is None:
             return False
         try:
@@ -120,9 +123,11 @@ class ContainerManager:
 
     @property
     def container_id(self) -> str | None:
+        """Short container ID for display, or None if no container is active."""
         return self._container.short_id if self._container else None
 
     def require_running(self) -> Container:
+        """Return the running container or raise ContainerError if it's not up."""
         if not self.is_running:
             raise ContainerError("No container running")
         assert self._container is not None

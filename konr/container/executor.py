@@ -19,7 +19,7 @@ _FLAG_PATTERNS = [
     re.compile(r"HTB\{[^}]+\}"),
     re.compile(r"THM\{[^}]+\}"),
     re.compile(r"flag\{[^}]+\}", re.IGNORECASE),
-    re.compile(r"[a-f0-9]{32}"),  # MD5-style
+    re.compile(r"[a-f0-9]{32}"),  # MD5-style hex — high false-positive rate, kept for coverage
 ]
 
 
@@ -40,6 +40,7 @@ class CommandExecutor:
     """Runs shell commands inside a running Docker container."""
 
     def __init__(self, container: Container) -> None:
+        """Bind the executor to an already-running Docker container."""
         self._container = container
 
     # ── Blocking execution ────────────────────────────────────────────────
@@ -134,6 +135,7 @@ class CommandExecutor:
         return result.output
 
     def file_exists(self, container_path: str) -> bool:
+        """Return True if the path exists and is a regular file inside the container."""
         import shlex
         result = self.run(f"test -f {shlex.quote(container_path)}")
         return result.succeeded
@@ -147,12 +149,14 @@ class CommandExecutor:
         return result.output.strip() if result.succeeded else None
 
     def tool_available(self, tool: str) -> bool:
+        """Return True if the named tool is on the container's PATH."""
         return self.which(tool) is not None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from terminal output."""
     return _ANSI_RE.sub("", text)
 
 
@@ -168,6 +172,7 @@ def _truncate(text: str, max_bytes: int) -> str:
 
 
 def _extract_flags(text: str) -> list[str]:
+    """Scan output for CTF flag patterns and return unique matches in order of appearance."""
     found: list[str] = []
     for pattern in _FLAG_PATTERNS:
         found.extend(pattern.findall(text))

@@ -15,6 +15,7 @@ class ADAgent(BaseAgent):
     name = "ad"
 
     def system_prompt(self) -> str:
+        """Return the AD specialist system prompt covering domain enumeration through DCSync."""
         return """You are an Active Directory penetration tester running inside a Docker container.
 
 ## Intelligence vs. confirmed findings

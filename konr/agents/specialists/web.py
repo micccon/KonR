@@ -16,6 +16,7 @@ class WebAgent(BaseAgent):
     name = "web"
 
     def system_prompt(self) -> str:
+        """Return the web specialist system prompt covering surface discovery through OWASP Top 10 testing."""
         return """You are a web application penetration tester running inside a Docker \
 container with full access to pentest tools.
 

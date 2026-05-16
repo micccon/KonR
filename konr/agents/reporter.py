@@ -51,6 +51,7 @@ class Reporter(SingleCallLLMAgent):
     """Single-call LLM reporter. Not a BaseAgent — no tool loop."""
 
     def __init__(self, db: FindingsDB) -> None:
+        """Initialise with a Haiku model and hold a DB reference for fetching findings."""
         super().__init__(model=config.HAIKU_MODEL, system_prompt=_PENTEST_SYSTEM)
         self._db = db
 
@@ -72,6 +73,7 @@ class Reporter(SingleCallLLMAgent):
 
 
 def _build_user_message(findings: dict, mode: str) -> str:
+    """Serialize all DB findings into a structured prompt, separating confirmed vulns from intelligence leads."""
     engagement = findings.get("engagement") or {}
     stats = findings.get("stats") or {}
 
@@ -108,6 +110,7 @@ def _build_user_message(findings: dict, mode: str) -> str:
 
 
 def _write_report(engagement: dict, content: str) -> str:
+    """Write the report Markdown to work/reports/ and return the file path."""
     name = engagement.get("name") or "engagement"
     safe_name = re.sub(r"[^\w-]", "_", name).lower().strip("_")
     date = datetime.now().strftime("%Y-%m-%d")

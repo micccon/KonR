@@ -58,6 +58,7 @@ class CostTracker:
         cache_read_tokens: int = 0,
         cache_write_tokens: int = 0,
     ) -> None:
+        """Accumulate token counts from a single API response."""
         self.input_tokens       += input_tokens
         self.output_tokens      += output_tokens
         self.cache_read_tokens  += cache_read_tokens
@@ -73,6 +74,7 @@ class CostTracker:
         )
 
     def as_dict(self) -> dict[str, Any]:
+        """Serialisable snapshot of all counters plus computed total_usd."""
         return {
             "input_tokens":       self.input_tokens,
             "output_tokens":      self.output_tokens,
@@ -98,7 +100,7 @@ class Session:
         # User interaction
         self.user_messages: asyncio.Queue[str] = asyncio.Queue(maxsize=100)
         self.pinned_context: list[str] = []
-        self.skip_event: asyncio.Event = asyncio.Event()
+        self.skip_event: asyncio.Event = asyncio.Event()  # set by TUI "Skip" button; cleared after each agent reads it
 
     # ── State ─────────────────────────────────────────────────────────────
 
@@ -107,6 +109,7 @@ class Session:
         return self._state
 
     def _transition(self, new_state: SessionState) -> None:
+        """Move to a new state, raising if the transition is not allowed."""
         allowed = _TRANSITIONS[self._state]
         if new_state not in allowed:
             raise InvalidTransitionError(
@@ -117,6 +120,7 @@ class Session:
     # ── Lifecycle ─────────────────────────────────────────────────────────
 
     async def start(self) -> None:
+        """Transition to RUNNING and record start time."""
         self._transition(SessionState.RUNNING)
         self._started_at = datetime.now(UTC)
         await self.bus.publish(
@@ -124,16 +128,19 @@ class Session:
         )
 
     async def pause(self) -> None:
+        """Pause execution; agents block on wait_if_paused() until resumed."""
         self._transition(SessionState.PAUSED)
         self._pause_event.clear()
         await self.bus.publish(Event(type=EventType.SESSION_PAUSED))
 
     async def resume(self) -> None:
+        """Unblock paused agents and return to RUNNING."""
         self._transition(SessionState.RUNNING)
         self._pause_event.set()
         await self.bus.publish(Event(type=EventType.SESSION_RESUMED))
 
     async def stop(self) -> None:
+        """Gracefully stop the engagement, unblocking any paused agents first."""
         if self._state == SessionState.PAUSED:
             self._pause_event.set()  # unblock any waiting agents
         self._transition(SessionState.STOPPING)
@@ -141,11 +148,13 @@ class Session:
         self._finish(SessionState.DONE)
 
     async def finish(self) -> None:
+        """Mark the engagement complete and publish the final summary event."""
         self._transition(SessionState.DONE)
         self._finish(SessionState.DONE)
         await self.bus.publish(Event(type=EventType.ENGAGEMENT_DONE, data=self.summary()))
 
     async def error(self, reason: str) -> None:
+        """Force the session into the ERROR state and publish the reason."""
         self._state = SessionState.ERROR
         self._ended_at = datetime.now(UTC)
         await self.bus.publish(
@@ -153,6 +162,7 @@ class Session:
         )
 
     def _finish(self, final: SessionState) -> None:
+        """Record end time and release the pause lock so no agent hangs on shutdown."""
         self._state = final
         self._ended_at = datetime.now(UTC)
         self._pause_event.set()
@@ -199,18 +209,22 @@ class Session:
     # ── Agent tracking ────────────────────────────────────────────────────
 
     def agent_started(self, agent_name: str) -> None:
+        """Register an agent as active."""
         self._active_agents.add(agent_name)
 
     def agent_finished(self, agent_name: str) -> None:
+        """Remove an agent from the active set."""
         self._active_agents.discard(agent_name)
 
     @property
     def active_agents(self) -> frozenset[str]:
+        """Snapshot of currently running agent names."""
         return frozenset(self._active_agents)
 
     # ── Phase tracking ────────────────────────────────────────────────────
 
     async def set_phase(self, phase: str) -> None:
+        """Update the current phase label and publish a PHASE_STARTED event."""
         self._phase = phase
         await self.bus.publish(
             Event(type=EventType.PHASE_STARTED, data={"phase": phase})
@@ -218,6 +232,7 @@ class Session:
 
     @property
     def current_phase(self) -> str:
+        """The phase string last set by the orchestrator (e.g. 'phase_1')."""
         return self._phase
 
     # ── Cost tracking ─────────────────────────────────────────────────────
@@ -266,6 +281,7 @@ class Session:
     # ── Summary ───────────────────────────────────────────────────────────
 
     def elapsed_seconds(self) -> float:
+        """Wall-clock seconds since start. Uses current time if not yet finished."""
         if self._started_at is None:
             return 0.0
         end = self._ended_at or datetime.now(UTC)

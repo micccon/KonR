@@ -16,7 +16,7 @@ _WORK_KEEP = {"findings.db", "memory", "logs", "reports"}
 
 
 def _clean_work_dir(work_dir: Path) -> None:
-    """Remove stale tool-output files from previous engagements."""
+    """Delete non-persistent files from the work directory, preserving DB, memory, logs, and reports."""
     for item in work_dir.iterdir():
         if item.name in _WORK_KEEP:
             continue
@@ -27,6 +27,7 @@ def _clean_work_dir(work_dir: Path) -> None:
 
 
 def _check_api_key() -> None:
+    """Exit with a clear error if ANTHROPIC_API_KEY is not set."""
     if not config.ANTHROPIC_API_KEY:
         click.echo("Error: ANTHROPIC_API_KEY is not set. Export it or add it to .env", err=True)
         sys.exit(1)

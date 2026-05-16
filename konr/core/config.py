@@ -31,7 +31,7 @@ MAX_REFINER_CYCLES = 3
 OUTPUT_TRUNCATE_BYTES = 8_192
 MAX_CONCURRENT_AGENTS: int = int(os.getenv("KONR_MAX_AGENTS", "3"))
 MAX_HISTORY_PAIRS: int = int(os.getenv("KONR_MAX_HISTORY", "20"))
-MAX_COST_USD: float | None = float(os.getenv("KONR_MAX_COST", "0")) or None
+MAX_COST_USD: float | None = float(os.getenv("KONR_MAX_COST", "0")) or None  # 0 → no cap
 
 # Pricing ($/token) for claude-sonnet-4-6
 SONNET_INPUT_PRICE:  float = 3.00  / 1_000_000

@@ -1,3 +1,4 @@
+"""SQLite findings database — hosts, services, vulns, creds, attack chains, flags."""
 from __future__ import annotations
 
 import json
@@ -10,19 +11,22 @@ from typing import Any
 def _now() -> str:
     return datetime.now(UTC).isoformat()
 
+
 _SCHEMA = Path(__file__).parent / "schema.sql"
 
+# Lower weight = higher priority in sorted output (critical first)
 _SEVERITY_WEIGHT = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
 
 class FindingsDB:
     def __init__(self, db_path: str | Path) -> None:
+        """Open or create the SQLite database, applying the schema if needed."""
         self.path = Path(db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self.path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys = ON")
-        self._conn.execute("PRAGMA journal_mode = WAL")
+        self._conn.execute("PRAGMA journal_mode = WAL")  # WAL allows concurrent readers during writes
         self._conn.executescript(_SCHEMA.read_text())
         self._conn.commit()
 
@@ -37,6 +41,7 @@ class FindingsDB:
         mode: str = "pentest",
         objectives: str | None = None,
     ) -> int:
+        """Insert a new engagement row and return its ID."""
         cur = self._conn.execute(
             """
             INSERT INTO engagements
@@ -49,18 +54,21 @@ class FindingsDB:
         return cur.lastrowid  # type: ignore[return-value]
 
     def get_engagement(self, engagement_id: int) -> dict[str, Any] | None:
+        """Return the engagement row as a dict, or None if not found."""
         row = self._conn.execute(
             "SELECT * FROM engagements WHERE id = ?", (engagement_id,)
         ).fetchone()
         return dict(row) if row else None
 
     def list_engagements(self) -> list[dict[str, Any]]:
+        """Return all engagements ordered newest first."""
         rows = self._conn.execute(
             "SELECT * FROM engagements ORDER BY created_at DESC"
         ).fetchall()
         return [dict(r) for r in rows]
 
     def update_engagement_status(self, engagement_id: int, status: str) -> None:
+        """Update the status column and bump updated_at."""
         self._conn.execute(
             "UPDATE engagements SET status = ?, updated_at = ? WHERE id = ?",
             (status, _now(), engagement_id),
@@ -79,11 +87,13 @@ class FindingsDB:
         os_version: str | None = None,
         role: str | None = None,
     ) -> int:
+        """Insert a host or enrich an existing one (never overwrites with null). Returns the host ID."""
         self._conn.execute(
             """
             INSERT INTO hosts (engagement_id, ip, hostname, os, os_version, role)
             VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(engagement_id, ip) DO UPDATE SET
+                -- COALESCE: only overwrite an existing value if the new value is non-null
                 hostname   = COALESCE(excluded.hostname,   hostname),
                 os         = COALESCE(excluded.os,         os),
                 os_version = COALESCE(excluded.os_version, os_version),
@@ -99,6 +109,7 @@ class FindingsDB:
         return row["id"]
 
     def get_hosts(self, engagement_id: int) -> list[dict[str, Any]]:
+        """Return all hosts for an engagement, ordered by IP."""
         rows = self._conn.execute(
             "SELECT * FROM hosts WHERE engagement_id = ? ORDER BY ip",
             (engagement_id,),
@@ -117,6 +128,7 @@ class FindingsDB:
         version: str | None = None,
         banner: str | None = None,
     ) -> int:
+        """Insert a service or enrich an existing one (keyed on host_id + port + protocol). Returns the service ID."""
         self._conn.execute(
             """
             INSERT INTO services (host_id, port, protocol, service_name, version, banner)
@@ -124,7 +136,7 @@ class FindingsDB:
             ON CONFLICT(host_id, port, protocol) DO UPDATE SET
                 service_name = COALESCE(excluded.service_name, service_name),
                 version      = COALESCE(excluded.version,      version),
-                banner       = COALESCE(excluded.banner,       banner)
+                banner       = COALESCE(excluded.banner,       banner)  -- never clobber with null
             """,
             (host_id, port, protocol, service_name, version, banner),
         )
@@ -136,6 +148,7 @@ class FindingsDB:
         return row["id"]
 
     def get_services(self, host_id: int) -> list[dict[str, Any]]:
+        """Return all services for a host, ordered by port number."""
         rows = self._conn.execute(
             "SELECT * FROM services WHERE host_id = ? ORDER BY port",
             (host_id,),
@@ -183,6 +196,7 @@ class FindingsDB:
     def get_vulnerabilities(
         self, engagement_id: int, severity: str | None = None
     ) -> list[dict[str, Any]]:
+        """Return vulnerabilities for an engagement, sorted critical→info. Pass severity to filter."""
         if severity:
             rows = self._conn.execute(
                 "SELECT * FROM vulnerabilities WHERE engagement_id = ? AND severity = ?",
@@ -229,6 +243,7 @@ class FindingsDB:
         return cur.lastrowid  # type: ignore[return-value]
 
     def get_credentials(self, engagement_id: int) -> list[dict[str, Any]]:
+        """Return all credentials for an engagement, ordered by discovery time."""
         rows = self._conn.execute(
             "SELECT * FROM credentials WHERE engagement_id = ? ORDER BY discovered_at",
             (engagement_id,),
@@ -266,6 +281,7 @@ class FindingsDB:
         return cur.lastrowid  # type: ignore[return-value]
 
     def get_attack_chains(self, engagement_id: int) -> list[dict[str, Any]]:
+        """Return attack chains with steps and MITRE techniques deserialised from JSON."""
         rows = self._conn.execute(
             "SELECT * FROM attack_chains WHERE engagement_id = ? ORDER BY created_at",
             (engagement_id,),
@@ -299,6 +315,7 @@ class FindingsDB:
         return cur.lastrowid  # type: ignore[return-value]
 
     def get_flags(self, engagement_id: int) -> list[dict[str, Any]]:
+        """Return all captured flags ordered by discovery time."""
         rows = self._conn.execute(
             "SELECT * FROM flags WHERE engagement_id = ? ORDER BY discovered_at",
             (engagement_id,),
@@ -335,6 +352,7 @@ class FindingsDB:
         return cur.lastrowid  # type: ignore[return-value]
 
     def get_approvals(self, engagement_id: int) -> list[dict[str, Any]]:
+        """Return the full approval log ordered by timestamp."""
         rows = self._conn.execute(
             "SELECT * FROM approvals WHERE engagement_id = ? ORDER BY timestamp",
             (engagement_id,),
@@ -364,6 +382,7 @@ class FindingsDB:
         return cur.lastrowid  # type: ignore[return-value]
 
     def get_session_log(self, engagement_id: int) -> list[dict[str, Any]]:
+        """Return all session log entries in chronological order."""
         rows = self._conn.execute(
             "SELECT * FROM session_log WHERE engagement_id = ? ORDER BY timestamp",
             (engagement_id,),
@@ -411,6 +430,7 @@ class FindingsDB:
     # ── Lifecycle ─────────────────────────────────────────────────────────
 
     def close(self) -> None:
+        """Close the underlying SQLite connection."""
         self._conn.close()
 
     def __enter__(self) -> FindingsDB:

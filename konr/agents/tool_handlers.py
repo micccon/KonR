@@ -28,6 +28,7 @@ class ToolHandlerMixin:
             pass
 
     async def _handle_execute_command(self, inputs: dict[str, Any]) -> str:
+        """Run a shell command in the container, check scope, auto-capture flags, and summarize if output is large."""
         if self.executor is None:
             return "Error: no container executor available for this agent"
         command = inputs["command"]
@@ -70,6 +71,7 @@ class ToolHandlerMixin:
         return f"[exit {result.exit_code}]{suffix}\n{output}"
 
     async def _handle_read_file(self, inputs: dict[str, Any]) -> str:
+        """Read a file from inside the container and return its contents."""
         if self.executor is None:
             return "Error: no container executor available for this agent"
         path = inputs["path"]
@@ -79,6 +81,7 @@ class ToolHandlerMixin:
             return f"Error reading {path}: {exc}"
 
     async def _handle_write_file(self, inputs: dict[str, Any]) -> str:
+        """Write content to a path inside the container."""
         if self.executor is None:
             return "Error: no container executor available for this agent"
         path, content = inputs["path"], inputs["content"]
@@ -89,6 +92,7 @@ class ToolHandlerMixin:
             return f"Error writing {path}: {exc}"
 
     async def _handle_store_finding(self, inputs: dict[str, Any]) -> str:
+        """Persist a finding to the DB and ChromaDB memory, dispatching on finding type."""
         finding_type = inputs["type"]
         data: dict[str, Any] = inputs["data"]
 
@@ -236,6 +240,8 @@ class ToolHandlerMixin:
                     return f"Attack chain stored: {data['title']} (id={chain_id})"
 
                 case "finding":
+                    # Stored at severity="finding" so the reporter can separate it from
+                    # confirmed vulnerabilities and place it in the Unverified Leads section.
                     host_id = None
                     if ip := data.get("ip"):
                         host_id = await asyncio.to_thread(
@@ -295,6 +301,8 @@ class ToolHandlerMixin:
             )
             return f"Auto-approved (CTF mode). Proceed with: {command}"
 
+        # One-shot event subscription: subscribe before publishing so we never miss the reply,
+        # wait on the event, then immediately unsubscribe to avoid leaking the handler.
         decision_event = asyncio.Event()
         decision_holder: dict[str, Any] = {}
 
@@ -351,6 +359,7 @@ class ToolHandlerMixin:
             raise ApprovalDeniedError("skipped")
 
     async def _handle_search_memory(self, inputs: dict[str, Any]) -> str:
+        """Query ChromaDB for semantically similar past findings or knowledge entries."""
         from konr.storage.memory import VectorMemory
         if self._memory is None:
             try:
@@ -379,6 +388,7 @@ class ToolHandlerMixin:
         return "\n\n---\n\n".join(parts)
 
     async def _handle_delegate_to_coder(self, inputs: dict[str, Any]) -> str:
+        """Spin up a CoderAgent sub-task and return its result inline."""
         from konr.agents.specialists.coder import CoderAgent
         coder = CoderAgent(
             engagement_id=self.engagement_id,
@@ -398,6 +408,7 @@ class ToolHandlerMixin:
         return f"CoderAgent failed: {result.error}"
 
     def _handle_task_complete(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        """Return a sentinel dict that signals the loop to exit with this summary."""
         return {
             "_task_complete": True,
             "_summary": inputs["summary"],
@@ -405,6 +416,7 @@ class ToolHandlerMixin:
         }
 
     async def _haiku_summarize(self, output: str, command: str) -> str:
+        """Use Haiku to condense large tool output, preserving all security-relevant details."""
         tool_name = command.split()[0] if command else "tool"
         prompt = (
             f"Summarize this pentest tool output from `{tool_name}`. "

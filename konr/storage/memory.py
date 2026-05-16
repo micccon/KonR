@@ -12,8 +12,13 @@ import chromadb.api
 from konr.core import config
 
 COLLECTIONS = frozenset(["tool_outputs", "techniques", "osint_data", "code_artifacts", "knowledge"])
-_SUMMARIZE_THRESHOLD = 16_000  # chars; content larger than this is summarized before storing
-_SEARCH_DISTANCE_MAX = 0.8     # cosine distance; results beyond this are discarded
+# Content above this size is summarized by Haiku before embedding — keeps token costs low
+# and avoids ChromaDB choking on very long documents.
+_SUMMARIZE_THRESHOLD = 16_000  # chars
+
+# Cosine distance cutoff — results past this threshold are too dissimilar to be useful.
+# ChromaDB returns distances in [0, 2]; 0.8 is roughly "tangentially related at best".
+_SEARCH_DISTANCE_MAX = 0.8
 
 
 class VectorMemory:
@@ -30,6 +35,7 @@ class VectorMemory:
         persist_dir: str | Path = "./work/memory",
         _client: chromadb.api.ClientAPI | None = None,
     ) -> None:
+        """Initialise all collections. Pass _client in tests to use an in-memory ChromaDB."""
         self._chroma = _client or chromadb.PersistentClient(path=str(persist_dir))
         self._cols = {
             name: self._chroma.get_or_create_collection(
@@ -145,6 +151,7 @@ class VectorMemory:
     # ── Inspection ────────────────────────────────────────────────────────────
 
     def count(self, collection: str) -> int:
+        """Return the number of documents in the given collection."""
         return self._col(collection).count()
 
     def reset_collection(self, collection: str) -> None:
@@ -158,6 +165,7 @@ class VectorMemory:
     # ── Internals ─────────────────────────────────────────────────────────────
 
     def _col(self, name: str) -> chromadb.api.models.Collection.Collection:
+        """Look up a collection by name, raising a clear error for unknown names."""
         if name not in self._cols:
             raise ValueError(
                 f"Unknown collection '{name}'. Valid collections: {sorted(COLLECTIONS)}"
@@ -165,6 +173,7 @@ class VectorMemory:
         return self._cols[name]
 
     def _haiku_summarize(self, content: str) -> str:
+        """Summarize oversized content with Haiku before embedding. Falls back to truncation on failure."""
         try:
             from anthropic.types import TextBlock
             response = self._anthropic.messages.create(

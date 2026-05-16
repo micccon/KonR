@@ -16,7 +16,7 @@ class EngagementScope:
 
     @classmethod
     def from_target_scope(cls, target_scope: str) -> EngagementScope:
-        """Parse a CLI target string (IP, CIDR, domain, or comma-separated mix)."""
+        """Parse a CLI target string into IP ranges and domains. Accepts IPs, CIDRs, domains, or a comma/space-separated mix."""
         ip_ranges: list[str] = []
         domains: list[str] = []
 
@@ -45,6 +45,7 @@ class EngagementScope:
 
 class ScopeChecker:
     def __init__(self, scope: EngagementScope) -> None:
+        """Pre-compile IP networks and exclusions for O(n) membership checks."""
         self._scope = scope
         self._networks: list[IPv4Network] = []
         for r in scope.ip_ranges:
@@ -138,13 +139,15 @@ class ScopeChecker:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _last_positional(parts: list[str]) -> str | None:
-    """Return the last argument that doesn't start with '-'."""
+    """Return the last positional argument (one that doesn't start with '-')."""
     for part in reversed(parts[1:]):
         if not part.startswith("-"):
             return part
     return None
 
 
+# Flags that consume the next argument — used by _ip_positional to avoid
+# treating a flag's value (e.g. "80,443" after -p) as the target host.
 _NMAP_VALUE_FLAGS = frozenset({
     "-p", "--port", "--ports",
     "--script", "--script-args",
@@ -160,7 +163,7 @@ _NMAP_VALUE_FLAGS = frozenset({
 
 
 def _looks_like_port_spec(s: str) -> bool:
-    """Return True if s looks like a port spec (80,443 or 1-1024 or 80,443,8080-9000)."""
+    """Return True if s looks like a port spec (e.g. 80,443 or 1-1024)."""
     return bool(re.match(r'^[\d,\-]+$', s))
 
 
@@ -189,7 +192,7 @@ def _ip_positional(parts: list[str]) -> str | None:
 
 
 def _flag_value(parts: list[str], flags: tuple[str, ...]) -> str | None:
-    """Return the value that follows any of the given flag names."""
+    """Return the value that follows any of the given flag names, handling both --flag value and --flag=value forms."""
     for i, part in enumerate(parts):
         if part in flags and i + 1 < len(parts):
             return parts[i + 1]
@@ -201,6 +204,7 @@ def _flag_value(parts: list[str], flags: tuple[str, ...]) -> str | None:
 
 
 def _hostname_from_url(url: str) -> str | None:
+    """Extract the hostname from a URL string, prepending http:// if no scheme is present."""
     if "://" not in url:
         url = "http://" + url
     try:

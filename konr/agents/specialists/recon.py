@@ -18,6 +18,7 @@ class ReconAgent(BaseAgent):
     model = config.HAIKU_MODEL
 
     def system_prompt(self) -> str:
+        """Return the recon specialist system prompt covering host discovery through web surface mapping."""
         return """You are an active reconnaissance agent running inside a Docker container with \
 full access to pentest tools. Your job is to comprehensively map the target before any \
 exploitation begins.

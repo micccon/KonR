@@ -73,9 +73,11 @@ class EventBus:
     # ── Subscription ──────────────────────────────────────────────────────
 
     def subscribe(self, event_type: EventType, handler: Handler) -> None:
+        """Register a handler for the given event type."""
         self._subscribers[event_type].append(handler)
 
     def unsubscribe(self, event_type: EventType, handler: Handler) -> None:
+        """Remove a previously registered handler. Silently ignores missing handlers."""
         try:
             self._subscribers[event_type].remove(handler)
         except ValueError:
@@ -109,6 +111,7 @@ class EventBus:
                 continue
 
     def stop(self) -> None:
+        """Signal the dispatch loop to exit on the next iteration."""
         self._running = False
 
     # ── Convenience factories ─────────────────────────────────────────────
@@ -119,4 +122,5 @@ class EventBus:
         agent: str | None = None,
         **data: Any,
     ) -> Event:
+        """Construct an Event from keyword arguments without importing the Event dataclass."""
         return Event(type=event_type, agent=agent, data=data)

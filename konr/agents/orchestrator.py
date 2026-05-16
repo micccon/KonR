@@ -27,6 +27,7 @@ class TaskOutcome:
 
     @property
     def status(self) -> str:
+        """Derived status string used by the refiner and TUI to assess phase outcomes."""
         if not self.agent_result.success:
             return "error"
         if self.agent_result.findings_count == 0:
@@ -82,13 +83,15 @@ class Orchestrator:
         self._reporter = Reporter(db)
         self._refiner_cycles = 0
         self._scope: ScopeChecker | None = None
-        self._knowledge_empty = False
+        # Shared across all child agents — avoids one ChromaDB client per agent
+        # and the SQLite WAL lock contention that would cause.
         try:
             from konr.storage.memory import VectorMemory
             self._memory: VectorMemory | None = VectorMemory()
             self._knowledge_empty = self._memory.count("knowledge") == 0
         except Exception:
             self._memory = None
+            self._knowledge_empty = False
         self.bus.subscribe(EventType.AGENT_STUCK, self._on_agent_stuck)
 
     # ── Public entry point ────────────────────────────────────────────────────
@@ -117,6 +120,8 @@ class Orchestrator:
                           task=f"Generating engagement plan for {target_scope}")
         )
 
+        # Keep the TUI alive during plan generation — without this, the UI goes
+        # silent for several seconds and looks frozen.
         async def _planning_heartbeat() -> None:
             dots = 0
             while True:
@@ -208,9 +213,11 @@ class Orchestrator:
     # ── Adviser (stuck handling) ──────────────────────────────────────────────
 
     def _on_agent_stuck(self, event: Event) -> None:
+        """Sync event handler — schedules the async adviser call without blocking the bus."""
         asyncio.ensure_future(self._handle_stuck(event))
 
     async def _handle_stuck(self, event: Event) -> None:
+        """Ask the Adviser for a concrete alternative and inject it as a user message."""
         try:
             hint = await self._adviser.generate(
                 agent_name=event.agent or "?",
@@ -291,6 +298,7 @@ class Orchestrator:
         agent_name: str | None = None,
         peer_types: set[str] | None = None,
     ) -> TaskOutcome:
+        """Instantiate the appropriate specialist agent and run a single task."""
         agent_cls = self._registry.get(task.type)
         if agent_cls is None:
             result = AgentResult(
@@ -356,7 +364,7 @@ def _build_context(
     ctf_mode: bool,
     peer_types: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Build the context dict passed to agent.run()."""
+    """Build the context dict passed to agent.run(), including dependency summaries and peer agent names."""
     dep_summaries = []
     for dep_id in task.depends_on:
         if dep_id in completed:

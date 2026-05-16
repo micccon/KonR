@@ -71,13 +71,16 @@ class BaseAgent(ToolHandlerMixin):
     # ── Subclass interface ────────────────────────────────────────────────────
 
     def system_prompt(self) -> str:
+        """Return the system prompt string for this specialist. Must be overridden."""
         raise NotImplementedError(f"{self.__class__.__name__} must implement system_prompt()")
 
     def tools(self) -> list[dict[str, Any]]:
+        """Return the tool schemas passed to the API. Subclasses may override to restrict the tool set."""
         return SPECIALIST_TOOLS
 
     @property
     def _max_tool_calls(self) -> int:
+        """CTF engagements use a lower cap to keep runs fast and focused."""
         return config.MAX_TOOL_CALLS_CTF if self.ctf_mode else config.MAX_TOOL_CALLS
 
     # ── Main loop ─────────────────────────────────────────────────────────────
@@ -121,6 +124,7 @@ class BaseAgent(ToolHandlerMixin):
             self.session.agent_finished(self.name)
 
     async def _loop(self, messages: list[dict[str, Any]]) -> AgentResult:
+        """Core tool-use loop: call the API, dispatch tools, repeat until done or limit hit."""
         while self._tool_call_count < self._max_tool_calls:
             await self.session.wait_if_paused()
             if self.session.state in (SessionState.STOPPING, SessionState.DONE):
@@ -211,6 +215,7 @@ class BaseAgent(ToolHandlerMixin):
     # ── Tool dispatch ─────────────────────────────────────────────────────────
 
     async def _dispatch_all(self, content: list[Any]) -> list[dict[str, Any]]:
+        """Execute all tool_use blocks in the response sequentially, respecting pause/stop state."""
         results = []
         for block in content:
             if block.type != "tool_use":
@@ -273,6 +278,7 @@ class BaseAgent(ToolHandlerMixin):
         return results
 
     async def _dispatch(self, name: str, inputs: dict[str, Any]) -> Any:
+        """Route a tool call by name to the appropriate handler method."""
         match name:
             case "execute_command":
                 return await self._handle_execute_command(inputs)
@@ -302,6 +308,8 @@ class BaseAgent(ToolHandlerMixin):
             len(self._recent_calls) == self._recent_calls.maxlen
             and len(set(self._recent_calls)) == 1
         ):
+            # Clear so the next N calls start a fresh window rather than
+            # immediately retriggering on the first different call.
             self._recent_calls.clear()
             return True
         return False
@@ -309,6 +317,7 @@ class BaseAgent(ToolHandlerMixin):
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _build_initial_message(self, task: str, context: dict[str, Any]) -> str:
+        """Build the first user message, injecting dependency results and confirmed DB findings."""
         parts = [f"Task: {task}"]
         if context:
             deps = context.get("dependency_results", [])
@@ -405,5 +414,6 @@ def _api_call_with_retry(
 
 
 def _call_signature(tool_name: str, inputs: dict[str, Any]) -> str:
+    # MD5 used purely for compact identity comparison, not cryptographic security.
     canonical = json.dumps(inputs, sort_keys=True)
     return hashlib.md5(f"{tool_name}:{canonical}".encode()).hexdigest()
