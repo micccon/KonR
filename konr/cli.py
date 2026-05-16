@@ -1,15 +1,30 @@
 """KonR CLI — entry point for launching an engagement."""
 from __future__ import annotations
 
+import itertools
 import re
 import shutil
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 
 import click
 
 from konr.core import config
+
+
+def _spin(label: str) -> threading.Event:
+    """Start a green animated dot spinner in a background thread. Call .set() on the returned event to stop."""
+    stop = threading.Event()
+    def _run() -> None:
+        for n in itertools.cycle([1, 2, 3]):
+            print(f"\r{click.style(label + '.' * n, fg='green')}  ", end="", flush=True)
+            if stop.wait(0.4):
+                break
+        print(f"\r{' ' * (len(label) + 6)}\r", end="", flush=True)  # erase the line
+    threading.Thread(target=_run, daemon=True).start()
+    return stop
 
 
 _WORK_KEEP = {"findings.db", "memory", "logs", "reports"}
@@ -62,6 +77,7 @@ def main(
 ) -> None:
     """KonR — AI-powered penetration testing system."""
     _check_api_key()
+    spinner = _spin("Starting")  # fire immediately — imports and container startup take a moment
 
     if model:
         config.SONNET_MODEL = model
@@ -84,6 +100,9 @@ def main(
     from konr.interface.tui import KonrApp
     from konr.storage.db import FindingsDB
 
+    container_mgr: ContainerManager | None = None
+    executor: CommandExecutor | None       = None
+
     config.WORK_DIR.mkdir(parents=True, exist_ok=True)
     _clean_work_dir(config.WORK_DIR)
     db            = FindingsDB(config.WORK_DIR / "findings.db")
@@ -91,9 +110,6 @@ def main(
 
     bus     = EventBus()
     session = Session(engagement_id=engagement_id, bus=bus)
-
-    container_mgr: ContainerManager | None = None
-    executor: CommandExecutor | None       = None
 
     if not no_docker:
         try:
@@ -105,7 +121,7 @@ def main(
             )
             executor = CommandExecutor(container_mgr.require_running())
         except ContainerError as exc:
-            click.echo(f"[warn] Docker unavailable — {exc}", err=True)
+            click.echo(f"\n[warn] Docker unavailable — {exc}", err=True)
             click.echo("[warn] Continuing without container; tool execution will fail.", err=True)
 
     registry = {
@@ -162,23 +178,27 @@ def main(
     if log_path:
         info["Log"] = str(log_path)
 
+    engagement_coro = _run_engagement()
     app = KonrApp(
         session=session,
         bus=bus,
         engagement_name=f"{engagement} — {target}",
-        engagement_coro=_run_engagement(),
+        engagement_coro=engagement_coro,
         info=info,
         log_file=log_path,
         db=db,
     )
+    spinner.set()  # stop "Starting..." — Textual takes over the terminal now
 
     try:
         app.run()
     finally:
-        click.echo(click.style("Quitting...", fg="green"))
+        engagement_coro.close()  # suppress "never awaited" warning if user quit before run started
+        spinner = _spin("Quitting")
         if container_mgr is not None:
             container_mgr.stop()
             container_mgr.remove()
+        spinner.set()
 
 
 if __name__ == "__main__":

@@ -344,6 +344,10 @@ class KonrApp(App[None]):
 
     # ── Startup ───────────────────────────────────────────────────────────────
 
+    def on_unmount(self) -> None:
+        if not self._engagement_started and self._coro is not None:
+            self._coro.close()  # suppress "never awaited" warning when app exits before engagement starts
+
     def on_mount(self) -> None:
         self._subscribe_bus()
         asyncio.get_event_loop().create_task(self.bus.run())
@@ -385,14 +389,18 @@ class KonrApp(App[None]):
         sub(EventType.APPROVAL_NEEDED, self._on_approval_needed)
         sub(EventType.COST_UPDATE,     self._on_cost_update)
         sub(EventType.ENGAGEMENT_DONE, self._on_engagement_done)
+        sub(EventType.SESSION_STOPPED, self._on_session_stopped)
         sub(EventType.USER_INPUT,      self._on_user_input)
 
     # ── EventBus handlers ─────────────────────────────────────────────────────
 
     def _on_agent_thinking(self, event: Event) -> None:
+        if not self._verbose:
+            return
         text       = event.data.get("text", "")
         first_line = text.splitlines()[0][:140] if text else ""
-        self.post_message(_ActivityLine(event.agent or "?", first_line, "thinking"))
+        if first_line:
+            self.post_message(_ActivityLine(event.agent or "?", first_line, "thinking"))
 
     def _on_tool_called(self, event: Event) -> None:
         tool = event.data.get("tool", "")
@@ -403,11 +411,15 @@ class KonrApp(App[None]):
         result = event.data.get("output", event.data.get("result", ""))
         if not result:
             return
+        lines = result.splitlines()
+        # Strip the [exit N] metadata prefix — not display content and breaks Rich markup
+        if lines and lines[0].startswith("[exit "):
+            lines = lines[1:]
         if self._verbose:
-            display = "\n".join(result.splitlines()[:20])
+            display = "\n".join(lines[:20])
         else:
-            display = result.splitlines()[0][:120]
-        if display:
+            display = lines[0][:120] if lines else ""
+        if display and display.strip():
             self.post_message(_ActivityLine(event.agent or "?", display, "output"))
 
     def _on_agent_started(self, event: Event) -> None:
@@ -458,6 +470,10 @@ class KonrApp(App[None]):
 
     def _on_engagement_done(self, event: Event) -> None:
         self.post_message(_ActivityLine("system", "Engagement complete.", "system"))
+
+    def _on_session_stopped(self, event: Event) -> None:
+        self.query_one(StatusBar).set_status("STOPPING")
+        self.post_message(_ActivityLine("system", "Stopping...", "system"))
 
     def _on_user_input(self, event: Event) -> None:
         text   = event.data.get("text", "")
@@ -567,7 +583,7 @@ class KonrApp(App[None]):
 
     async def action_request_quit(self) -> None:
         self.query_one(StatusBar).flash_hint("^C")
-        if self.session.state == SessionState.RUNNING:
+        if self.session.state in (SessionState.RUNNING, SessionState.PAUSED):
             await self.session.stop()
         self.exit()
 
@@ -627,5 +643,7 @@ def _summarise_finding(kind: str, data: dict) -> str:
         sev = data.get("severity", "?").upper()
         return f"Vuln [{sev}]: {data.get('title', '?')}"
     if kind == "cred":
-        return f"Cred: {data.get('username', '?')} @ {data.get('ip', '?')}"
+        user = data.get("username", "?")
+        location = data.get("ip") or data.get("domain") or data.get("access_level") or "unknown"
+        return f"Cred: {user} @ {location}"
     return str(data)

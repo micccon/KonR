@@ -67,10 +67,11 @@ class StatusBar(Widget):
 
     def _status_color(self) -> str:
         return {
-            "RUNNING": "#00ff41",
-            "PAUSED":  "#ffff00",
-            "DONE":    "#007722",
-            "ERROR":   "#ff3333",
+            "RUNNING":  "#00ff41",
+            "PAUSED":   "#ffff00",
+            "STOPPING": "#ff8800",
+            "DONE":     "#007722",
+            "ERROR":    "#ff3333",
         }.get(self.status, "#00ff41")
 
     def set_filter(self, agent: str | None) -> None:
@@ -83,8 +84,8 @@ class StatusBar(Widget):
     def _update_left(self) -> None:
         color  = self._status_color()
         # Show per-agent cost when a filter is active, otherwise total
-        if self._filter and self._filter in self._agent_costs:
-            cost_val = self._agent_costs[self._filter]
+        if self._filter:
+            cost_val = self._agent_costs.get(self._filter, 0.0)
             cost_str = f"[#00ff41]${cost_val:.4f} ({self._filter})[/#00ff41]"
         else:
             cost_str = f"[#00ff41]${self.cost:.4f}[/#00ff41]"

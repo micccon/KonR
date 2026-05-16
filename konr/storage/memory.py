@@ -129,11 +129,7 @@ class VectorMemory:
         parts = []
         for r in results:
             meta = r["metadata"]
-            header = (
-                f"[{meta.get('tool', 'unknown')} "
-                f"on {meta.get('target', '?')} "
-                f"at {meta.get('timestamp', '?')}]"
-            )
+            header = f"({meta.get('agent', 'unknown')} | {meta.get('target', '?')})"
             parts.append(f"{header}\n{r['content'][:config.MEMORY_RESULT_MAX_CHARS]}")
         return "\n\n---\n\n".join(parts)
 

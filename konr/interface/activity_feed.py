@@ -26,7 +26,7 @@ def _agent_base_name(agent: str) -> str:
 AGENT_COLORS: dict[str, str] = {
     "recon":           "#00ff41",
     "osint":           "#00ffcc",
-    "web":             "#99ff00",
+    "web":             "#ffff00",
     "network_exploit": "#ff9900",
     "ad":              "#ff6600",
     "postexploit":     "#ff3300",
@@ -120,10 +120,11 @@ class ActivityFeed(RichLog):
         agent_tag = f"[bold {acolor}]{escape(f'[{agent}]')}[/bold {acolor}]"
 
         style, pfx = _ENTRY_STYLE.get(entry_type, ("", ""))
+        safe = escape(content)
         if style:
-            content_tag = f"[{style} {ecolor}]{pfx}{content}[/{style} {ecolor}]"
+            content_tag = f"[{style} {ecolor}]{pfx}{safe}[/{style} {ecolor}]"
         else:
-            content_tag = f"[{ecolor}]{content}[/{ecolor}]"
+            content_tag = f"[{ecolor}]{safe}[/{ecolor}]"
 
         self.write(f"{ts_tag}  {agent_tag}  {content_tag}")
         self.scroll_end(animate=False)

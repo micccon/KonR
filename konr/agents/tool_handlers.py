@@ -17,10 +17,11 @@ class ToolHandlerMixin:
         """Write a finding summary to VectorMemory so parallel agents can find it."""
         if self._memory is None:
             return
+        collection = "osint_data" if self.name == "osint" else "tool_outputs"
         try:
             await asyncio.to_thread(
                 self._memory.store,
-                "tool_outputs",
+                collection,
                 content,
                 {"agent": self.name, "engagement_id": str(self.engagement_id), **metadata},
             )
@@ -219,6 +220,9 @@ class ToolHandlerMixin:
                             EventType.CRED_FOUND,
                             agent=self.name,
                             username=data.get("username"),
+                            ip=data.get("ip"),
+                            domain=data.get("domain"),
+                            access_level=data.get("access_level"),
                         )
                     )
                     await self._store_to_memory(
@@ -380,10 +384,7 @@ class ToolHandlerMixin:
         parts = []
         for r in results:
             meta = r.get("metadata", {})
-            header = (
-                f"[{meta.get('tool', '?')} on {meta.get('target', '?')}"
-                f" at {meta.get('timestamp', '?')}]"
-            )
+            header = f"({meta.get('agent', '?')} | {meta.get('target', '?')})"
             parts.append(f"{header}\n{r['content'][:config.MEMORY_RESULT_MAX_CHARS]}")
         return "\n\n---\n\n".join(parts)
 

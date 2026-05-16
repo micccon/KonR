@@ -52,9 +52,21 @@ Skip any step whose key is empty rather than erroring.
 ## RFC1918 / Private IP targets
 If the target is an RFC1918 address (10.x.x.x, 172.16–31.x.x, 192.168.x.x) or
 a loopback/link-local address:
-- Skip WHOIS, reverse DNS, ASN lookups, and all external API calls — they return nothing useful
-- Skip straight to Step 3: check `/work/` for existing recon data from the recon agent
-- Your value on internal targets is analysing what recon already found, not external lookups
+- Skip WHOIS, reverse DNS, ASN lookups, searchsploit, and all external API calls — they
+  return nothing useful on private IPs
+- Read `/work/recon_summary.md` and `/work/nmap_services.txt` to understand what recon found
+- After reading those files, produce a skip list of findings already stored by prior agents:
+  ```
+  ALREADY CONFIRMED BY PRIOR AGENTS:
+  - [skip] <host, service, or finding already stored by recon>
+  (one line per item)
+  ```
+  Do not call `store_finding` for anything on this list.
+- Only run searchsploit if the knowledge base or common knowledge tells you a specific
+  version is historically associated with a critical backdoor or RCE — do not run it
+  speculatively on current or recent service versions
+- Store any useful intelligence leads based on what you read, then call task_complete
+- Your entire budget on a private IP with no API keys is 5 tool calls — use them wisely
 
 ## STEP 2 — Run the playbook that matches your target type
 
@@ -161,6 +173,11 @@ a loopback/link-local address:
 Summarise: IPs/ASNs found, subdomains, emails, technologies identified,
 email naming convention (e.g. firstname.lastname@domain), and any sensitive exposures.
 
+## KNOWLEDGE BASE
+When you find something and aren't sure of the exact technique or next step —
+search the knowledge base before guessing:
+  search_memory(collection="knowledge", query="<specific thing you found>")
+
 ## RULES
 - Never run nmap, masscan, or any direct port scanner
 - Skip any step silently if its API key is missing
@@ -175,7 +192,7 @@ email naming convention (e.g. firstname.lastname@domain), and any sensitive expo
                 config.SHODAN_API_KEY, config.CENSYS_API_ID,
                 config.HUNTER_API_KEY, config.VIRUSTOTAL_API_KEY,
             ])
-            return 15 if has_keys else 8
+            return 15 if has_keys else 5
         return config.MAX_TOOL_CALLS
 
     def _build_initial_message(self, task: str, context: dict[str, Any]) -> str:
@@ -190,12 +207,12 @@ email naming convention (e.g. firstname.lastname@domain), and any sensitive expo
             if not has_keys:
                 parts.append(
                     "NOTE: CTF mode, internal IP target, no API keys available.\n"
-                    "Skip whois, reverse DNS, ipinfo.io, and all external API lookups — "
-                    "they return nothing on RFC1918 addresses.\n"
-                    "Useful calls only: check env for any API keys, run searchsploit for "
-                    "service names/versions discovered by recon, store hits as "
-                    "store_finding(type='finding') — never as type='vulnerability'. "
-                    "Then call task_complete. Budget is 8 tool calls — use them wisely."
+                    "Do NOT run searchsploit, whois, reverse DNS, ipinfo.io, or any "
+                    "external API — they return nothing on RFC1918 addresses.\n"
+                    "Your only job: (1) check env for API keys, (2) read "
+                    "/work/recon_summary.md and /work/nmap_services.txt, (3) store any "
+                    "useful intelligence leads based on what recon found, "
+                    "(4) call task_complete. Budget is 5 tool calls — use them wisely."
                 )
         return "\n\n".join(parts)
 

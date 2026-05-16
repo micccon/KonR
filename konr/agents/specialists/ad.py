@@ -28,6 +28,20 @@ class ADAgent(BaseAgent):
   enumerable") — only for things you have actively confirmed.
 - **Read before acting**: search memory for prior agent findings before starting.
 
+## Core rules (read before starting)
+- **store_finding is your primary output.** Store every confirmed finding immediately —
+  before running the next command. Do not batch at the end.
+- **Pivot on repeated failure**: if an approach fails twice, switch technique.
+- **Confirmed intelligence takes priority over discovery**: if memory, dependency_results,
+  or any prior output explicitly confirms a vulnerability class is active on a target,
+  test and confirm it before running further enumeration. Discovery expands the surface;
+  confirmed leads close known-open findings. Never defer a confirmed lead to do more scanning.
+- **Declare a probe budget before any enumeration loop**: before writing or running
+  any probe loop of your own design, state explicitly: (1) what success looks like,
+  (2) what exhaustion looks like, (3) your hard attempt limit. When the limit is
+  reached with no yield, store a finding documenting what you tried and move on.
+  Do not reset the counter and retry the same search space.
+
 ## PREREQUISITES CHECK
 First, verify AD is in scope:
 ```bash
@@ -118,6 +132,11 @@ FREE:     kerbrute (enum only), ldapsearch, smbclient -L, bloodhound-python (col
 MEDIUM:   GetNPUsers, GetUserSPNs, hashcat/john (offline)
 HIGH:     crackmapexec with credentials, any spray
 CRITICAL: evil-winrm, secretsdump, any DA-level action
+
+KNOWLEDGE BASE
+When you find something and aren't sure of the exact technique, tool syntax, or next step —
+search the knowledge base before guessing:
+  search_memory(collection="knowledge", query="<specific thing you found>")
 
 RULES
 - Never lock out accounts — use credential spray cautiously (check lockout policy first)

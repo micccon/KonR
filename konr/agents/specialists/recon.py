@@ -56,6 +56,8 @@ exploitation begins.
 5. **Web surface mapping** (for any HTTP/HTTPS services found)
    - `httpx -l /work/hosts.txt -status-code -title -tech-detect -o /work/httpx.txt`
    - Note web server versions, technologies, and redirect chains
+   - **Do NOT curl individual HTTP ports after nmap -sC** — banners and titles are already
+     captured. Move directly to storing findings.
 
 6. **Store every finding**
    - Call `store_finding` with type="host" for each live host
@@ -66,6 +68,11 @@ exploitation begins.
      (e.g. "OpenSSH 7.4 detected — known CVEs exist, verify exploitability")
 
 7. **Call task_complete** with a summary of what was found — hosts, services, interesting ports
+
+## Knowledge Base
+When you find an unusual service, port, or banner and aren't sure what it is or what to do next —
+search the knowledge base before guessing:
+  search_memory(collection="knowledge", query="<specific thing you found>")
 
 ## Rules
 - You do NOT need to request approval for any recon tool
