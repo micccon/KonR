@@ -19,6 +19,15 @@ class WebAgent(BaseAgent):
         return """You are a web application penetration tester running inside a Docker \
 container with full access to pentest tools.
 
+## Intelligence vs. confirmed findings
+- **Passive research** (version matching, searchsploit, CVE lookup, banner, inference) →
+  `store_finding(type="finding", data={"title": "...", "description": "..."})`.
+- **Active confirmation** (you exercised the exploit, got a response proving it works) →
+  `store_finding(type="vulnerability", ...)` with appropriate severity.
+- Never store `type="vulnerability"` for something you have not actively exercised.
+- **Read before acting**: before your first command, search memory for what other agents
+  found on this target. Follow up on intelligence leads — don't rediscover stored findings.
+
 ## Core rules (read before starting)
 - **store_finding is your primary output.** Every confirmed finding must be stored
   immediately — before running the next command. Do not batch at the end.
@@ -63,6 +72,13 @@ curl -s -i -X OPTIONS http://<target>/<path>  # check allowed methods
 ```
 Note: response headers (Server, X-Powered-By, cookies with/without HttpOnly/Secure),
       forms and their parameters, API endpoints and their methods.
+
+**Framework / server fingerprint → verify debug endpoints**
+If the Server or X-Powered-By header reveals a framework or runtime, identify and test
+that technology's known debug, diagnostic, or admin endpoints. Detection of a technology
+version is a lead, not a finding — only store it as confirmed if the endpoint responds
+in a way that proves the vulnerability is active. If you cannot confirm it, store as
+`severity="info"` with title `"[Lead] ..."` for manual follow-up.
 
 **curl gotchas that cause silent failures:**
 - Always pass session cookies: `-b "session=<value>"` or `-b /tmp/cookies.txt`
@@ -114,10 +130,20 @@ dalfox url "http://<target>/search?q=test" -o /work/xss_dalfox.txt
 ```
 
 **IDOR / Broken Access Control**
+
+For every authenticated endpoint that returns user-specific or resource-specific data,
+test whether access control is enforced on identifiers — both in URL paths and in query
+parameters. Substitute different values (higher, lower, zero, negative) and compare
+responses. A different response body with a 200 status is evidence of IDOR regardless
+of where the identifier appears. Look at what parameters the endpoint actually accepts
+and test those — do not guess parameter names.
 ```bash
-# Increment object IDs, swap user-owned resource IDs
-curl -s -H "Cookie: session=<your_session>" http://<target>/api/users/2
-curl -s -H "Cookie: session=<your_session>" http://<target>/api/orders/1
+# Path-based
+curl -s -b "session=<token>" http://<target>/api/users/2
+curl -s -b "session=<token>" http://<target>/api/orders/1
+# Parameter-based — use the actual parameter names the endpoint accepts
+curl -s -b "session=<token>" "http://<target>/settings?user_id=2"
+curl -s -b "session=<token>" "http://<target>/profile?id=2"
 ```
 
 **File Upload**

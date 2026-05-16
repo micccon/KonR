@@ -235,6 +235,27 @@ class ToolHandlerMixin:
                     )
                     return f"Attack chain stored: {data['title']} (id={chain_id})"
 
+                case "finding":
+                    host_id = None
+                    if ip := data.get("ip"):
+                        host_id = await asyncio.to_thread(
+                            self.db.upsert_host, self.engagement_id, ip
+                        )
+                    vuln_id = await asyncio.to_thread(
+                        self.db.add_vulnerability,
+                        self.engagement_id,
+                        data["title"],
+                        "finding",
+                        host_id=host_id,
+                        description=data.get("description"),
+                        agent=self.name,
+                    )
+                    await self._store_to_memory(
+                        f"Lead: {data['title']} — {data.get('description', '')[:300]}".strip(),
+                        {"type": "finding", "target": data.get("ip", "")},
+                    )
+                    return f"Intelligence lead stored: {data['title']} (id={vuln_id})"
+
                 case "flag":
                     flag_id = await asyncio.to_thread(
                         self.db.add_flag,

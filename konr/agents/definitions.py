@@ -75,7 +75,7 @@ STORE_FINDING: dict[str, Any] = {
         "properties": {
             "type": {
                 "type": "string",
-                "enum": ["host", "service", "vulnerability", "credential", "attack_chain", "flag"],
+                "enum": ["host", "service", "vulnerability", "finding", "credential", "attack_chain", "flag"],
                 "description": "Category of finding",
             },
             "data": {
@@ -89,6 +89,10 @@ STORE_FINDING: dict[str, Any] = {
                     " critical/high/medium/low/info), "
                     "ip, port, cvss, cve, description, evidence, reproduction, remediation,"
                     " mitre_id\n"
+                    "finding: title (required), description (required), ip — use for intelligence"
+                    " leads: passive research, version-based CVE hits, searchsploit matches that"
+                    " have NOT been actively verified. These appear as Unverified Leads in the"
+                    " report, not as confirmed vulnerabilities.\n"
                     "credential: username, secret, secret_type, domain, access_level, source_tool, "
                     "validity (valid/invalid/unknown), ip\n"
                     "attack_chain: title (required), steps (required: list of step objects), "

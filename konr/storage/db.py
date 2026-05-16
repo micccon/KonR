@@ -384,7 +384,8 @@ class FindingsDB:
         severity_counts: dict[str, int] = {}
         for v in vulns:
             sev = v["severity"].lower()
-            severity_counts[sev] = severity_counts.get(sev, 0) + 1
+            if sev != "finding":
+                severity_counts[sev] = severity_counts.get(sev, 0) + 1
 
         services_by_host: dict[int, list[dict[str, Any]]] = {}
         for h in hosts:

@@ -20,8 +20,12 @@ Follow this structure exactly:
 4. Detailed Findings — one section per vulnerability, ordered critical→low
 5. Attack Chains (if any)
 6. Discovered Credentials table (usernames only — no plaintext passwords)
-7. Appendix A — Approved Commands Log
-8. Appendix B — Tools Used
+7. Unverified Leads — if INTELLIGENCE_LEADS data is provided, add this section.
+   List each lead with: what was found, which agent flagged it, what verification step
+   is needed. Use clear language — these are unconfirmed intelligence leads, not
+   confirmed vulnerabilities. Do not assign severity scores to them.
+8. Appendix A — Approved Commands Log
+9. Appendix B — Tools Used
 
 Be professional and precise. Include all findings from the data — do not omit any."""
 
@@ -71,13 +75,17 @@ def _build_user_message(findings: dict, mode: str) -> str:
     engagement = findings.get("engagement") or {}
     stats = findings.get("stats") or {}
 
+    all_vulns = findings.get("vulnerabilities", [])
+    confirmed_vulns = [v for v in all_vulns if v.get("severity") != "finding"]
+    leads = [v for v in all_vulns if v.get("severity") == "finding"]
+
     parts = [
         f"Mode: {mode}",
         f"\nENGAGEMENT:\n{json.dumps(engagement, indent=2, default=str)}",
-        f"\nSTATS:\n{json.dumps(stats, indent=2)}",
+        f"\nSTATS (confirmed findings only — leads excluded):\n{json.dumps(stats, indent=2)}",
         f"\nHOSTS:\n{json.dumps(findings.get('hosts', []), indent=2, default=str)}",
         "\nVULNERABILITIES:\n"
-        + json.dumps(findings.get("vulnerabilities", []), indent=2, default=str),
+        + json.dumps(confirmed_vulns, indent=2, default=str),
         "\nATTACK CHAINS:\n"
         + json.dumps(findings.get("attack_chains", []), indent=2, default=str),
         f"\nFLAGS:\n{json.dumps(findings.get('flags', []), indent=2, default=str)}",
@@ -90,6 +98,8 @@ def _build_user_message(findings: dict, mode: str) -> str:
             indent=2,
             default=str,
         ),
+        "\nINTELLIGENCE_LEADS (unverified — for Unverified Leads section only):\n"
+        + json.dumps(leads, indent=2, default=str),
         "\nAPPROVED COMMANDS LOG:\n"
         + json.dumps(findings.get("approvals", []), indent=2, default=str),
         "\nGenerate the complete report now.",

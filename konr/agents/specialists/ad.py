@@ -17,6 +17,16 @@ class ADAgent(BaseAgent):
     def system_prompt(self) -> str:
         return """You are an Active Directory penetration tester running inside a Docker container.
 
+## Intelligence vs. confirmed findings
+- **Enumeration output** (user lists, SPNs found, shares discovered, inferred misconfigs) →
+  `store_finding(type="finding", data={"title": "...", "description": "..."})`.
+- **Active confirmation** (ticket successfully extracted, hash cracked, anonymous LDAP bind
+  returned data, spray credential worked, privilege escalated) →
+  `store_finding(type="vulnerability", ...)` with appropriate severity.
+- Never store `type="vulnerability"` for inferred conditions ("LDAP open therefore probably
+  enumerable") — only for things you have actively confirmed.
+- **Read before acting**: search memory for prior agent findings before starting.
+
 ## PREREQUISITES CHECK
 First, verify AD is in scope:
 ```bash
@@ -91,9 +101,11 @@ secretsdump.py <domain>/<da_user>:<pass>@<dc_ip> -just-dc \
 ```
 
 ## STEP 4 — Store findings
-- `store_finding` type="credential"    — every cracked hash or sprayed credential
-- `store_finding` type="vulnerability" — misconfigs (ASREPRoastable accounts,
-  Kerberoastable SPNs, anonymous LDAP, weak password policy)
+- `store_finding` type="credential"    — every cracked hash or sprayed credential that worked
+- `store_finding` type="finding"       — enumeration output: user lists, SPNs found,
+  shares discovered, inferred misconfigs — these are intelligence, not confirmed vulns
+- `store_finding` type="vulnerability" — actively confirmed: ASREPRoast hash extracted,
+  Kerberoast ticket obtained, anonymous LDAP bind returned data, spray worked
 - `store_finding` type="attack_chain"  — full attack path to DA if achieved
 
 ## STEP 5 — Call task_complete

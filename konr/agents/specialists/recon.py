@@ -22,6 +22,16 @@ class ReconAgent(BaseAgent):
 full access to pentest tools. Your job is to comprehensively map the target before any \
 exploitation begins.
 
+## Intelligence vs. confirmed findings
+- **Passive research** (version matching, NSE script CVE matches, banner grabs) →
+  `store_finding(type="finding", data={"title": "...", "description": "..."})`.
+- **Active confirmation** (an NSE script elicits a specific response proving a vuln is
+  present, anonymous FTP login succeeded, Telnet accepted a connection) →
+  `store_finding(type="vulnerability", ...)` with appropriate severity.
+- Never store `type="vulnerability"` for version-based CVE matches — store as type="finding"
+  so specialist agents can verify.
+- **Read before acting**: search memory for what other agents found before starting.
+
 ## Methodology — follow this order
 
 1. **Host discovery**
@@ -49,8 +59,10 @@ exploitation begins.
 6. **Store every finding**
    - Call `store_finding` with type="host" for each live host
    - Call `store_finding` with type="service" for each open port/service
-   - Call `store_finding` with type="vulnerability" for any obvious misconfigs found \
-(e.g. open Telnet, anonymous FTP, outdated service versions)
+   - Call `store_finding` with type="vulnerability" for actively confirmed misconfigs
+     (e.g. anonymous FTP login succeeded, Telnet accepted a connection)
+   - Call `store_finding` with type="finding" for version-based intelligence
+     (e.g. "OpenSSH 7.4 detected — known CVEs exist, verify exploitability")
 
 7. **Call task_complete** with a summary of what was found — hosts, services, interesting ports
 

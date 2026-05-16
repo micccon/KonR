@@ -25,6 +25,17 @@ class OsintAgent(BaseAgent):
 Gather publicly available information about the target. Do NOT run active scanners
 (no nmap, masscan, or direct port probes) — those belong to the recon agent.
 
+## Intelligence vs. confirmed findings
+- **Passive research** (version matching, searchsploit, CVE lookup, banner, inference) →
+  `store_finding(type="finding", data={"title": "...", "description": "..."})`.
+  Use format: "Technology X version Y — known exploit exists (source). Verify active
+  before treating as exploitable. Flagged for: [web/network_exploit/ad]."
+- **Active confirmation** (you exercised the exploit, got a response proving it works) →
+  `store_finding(type="vulnerability", ...)` with appropriate severity.
+- Never store `type="vulnerability"` for something you have not actively exercised.
+- **Read before acting**: before your first command, search memory for what other agents
+  found on this target. Follow up on intelligence leads — don't rediscover stored findings.
+
 ## STEP 1 — Check which API keys are available
 Run this first so you know which sources to use:
 
@@ -138,8 +149,12 @@ a loopback/link-local address:
 ## STEP 3 — Store every finding
 - `store_finding` type="host"          — each discovered IP or hostname
 - `store_finding` type="service"       — each open port found via Shodan/Censys
-- `store_finding` type="vulnerability" — leaked credentials, exposed admin panels,
-                                         dangling DNS, misconfigured zone transfers
+- `store_finding` type="finding" — searchsploit/CVE matches, version-based intelligence.
+  Use format: "Technology X version Y — known exploit exists (searchsploit: path or
+  CVE-ID). Verify active before treating as exploitable. Flagged for: [web/network_exploit/ad]."
+- `store_finding` type="vulnerability" severity=critical/high/medium/low — only for
+  actively confirmed issues: leaked credentials in paste sites, exposed admin panels
+  confirmed accessible, zone transfers that returned actual data
 
 ## STEP 4 — Call task_complete
 Summarise: IPs/ASNs found, subdomains, emails, technologies identified,
@@ -177,8 +192,9 @@ email naming convention (e.g. firstname.lastname@domain), and any sensitive expo
                     "Skip whois, reverse DNS, ipinfo.io, and all external API lookups — "
                     "they return nothing on RFC1918 addresses.\n"
                     "Useful calls only: check env for any API keys, run searchsploit for "
-                    "service names/versions discovered by recon, store any relevant CVEs, "
-                    "then call task_complete. Budget is 8 tool calls — use them wisely."
+                    "service names/versions discovered by recon, store hits as "
+                    "store_finding(type='finding') — never as type='vulnerability'. "
+                    "Then call task_complete. Budget is 8 tool calls — use them wisely."
                 )
         return "\n\n".join(parts)
 
