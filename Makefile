@@ -33,4 +33,4 @@ docker-shell:
 	  konr:latest /bin/bash
 
 seed-knowledge:
-	$(BIN)/python scripts/seed_knowledge.py
+	$(BIN)/python knowledge/seed_knowledge.py

