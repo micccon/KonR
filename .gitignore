@@ -1,43 +1,14 @@
+# Hidden files & dotfiles
+.*
+
 # Python
 __pycache__/
-*.py[cod]
-*.pyo
-.venv/
 venv/
-dist/
-build/
-*.egg-info/
-.eggs/
 
-# Environment
-.env
-
-# Runtime artifacts (engagement outputs, DB, vector memory)
+# Runtime artifacts
 work/
 vpn/
 
-# ChromaDB
-chroma/
-
-# Editor
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Type checking
-.mypy_cache/
-.ruff_cache/
-
-# Tests
-.pytest_cache/
-.pytest_tmp/
-htmlcov/
-.coverage
-automotive_testbed/
+# Test artifacts
+test_containers/
 tests/
-plan/
