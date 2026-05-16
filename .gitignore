@@ -39,4 +39,5 @@ Thumbs.db
 htmlcov/
 .coverage
 automotive_testbed/
-tests/plan/
+tests/
+plan/
