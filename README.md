@@ -36,7 +36,9 @@ KonR orchestrates a team of specialized AI agents — each running inside a Dock
 - Docker
 - An Anthropic API key
 
-## Installation
+## Setup
+
+**1. Clone and install**
 
 ```bash
 git clone https://github.com/yourusername/konr.git
@@ -44,23 +46,62 @@ cd konr
 ./install.sh
 ```
 
-The install script creates a virtualenv, installs dependencies, builds the Docker image, and drops a `.env` template.
+The script installs [uv](https://github.com/astral-sh/uv) if needed, creates a virtualenv, and installs all dependencies.
 
-Add your API key to `.env`:
+**2. Activate the environment**
+
+```bash
+source .venv/bin/activate
+```
+
+> The install script cannot activate the environment for you — shell activation always has to be run manually in your current terminal session. You'll need to repeat this step each time you open a new terminal.
+
+**3. Configure API keys**
+
+The install script creates `.env` from `.env.example` automatically. Open it and add your keys:
 
 ```
+# Required
 ANTHROPIC_API_KEY=sk-ant-...
-```
 
-Optional API keys (used by the OSINT agent if present):
-
-```
+# Optional — OSINT agent degrades gracefully without these
 SHODAN_API_KEY=
 CENSYS_API_ID=
 CENSYS_API_SECRET=
 HUNTER_API_KEY=
 VIRUSTOTAL_API_KEY=
 ```
+
+**4. Build the Docker container**
+
+```bash
+make docker-build
+```
+
+This builds the pentest image with nmap, ffuf, sqlmap, nuclei, and the full SecLists wordlist collection pre-installed.
+
+**5. (Optional) Seed the knowledge base**
+
+```bash
+make seed-knowledge
+```
+
+Populates ChromaDB with pentest reference data (GTFOBins, common CVEs, technique descriptions) that agents can query via `search_memory`.
+
+**6. Verify**
+
+```bash
+konr --help
+```
+
+## Modes
+
+| Mode | Flag | Behaviour |
+|---|---|---|
+| **CTF** | `--ctf` | Fully autonomous — all tool calls auto-approved, flag detection enabled (`HTB{...}`, `THM{...}` etc.) |
+| **Pentest** | _(default)_ | Approval gates on risky actions (sqlmap, msfconsole, brute force). You confirm before anything destructive runs. |
+
+> Docker must be running before launching an engagement. KonR spawns and manages the pentest container automatically.
 
 ## Usage
 

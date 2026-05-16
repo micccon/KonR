@@ -182,9 +182,18 @@ class _InfoPanel(Static):
     }
     """
 
+    _LOGO = (
+        "  [#00ff41]██╗  ██╗ ██████╗ ███╗   ██╗██████╗[/#00ff41]\n"
+        "  [#00ff41]██║ ██╔╝██╔═══██╗████╗  ██║██╔══██╗[/#00ff41]\n"
+        "  [#00ff41]█████╔╝ ██║   ██║██╔██╗ ██║██████╔╝[/#00ff41]\n"
+        "  [#00ff41]██╔═██╗ ██║   ██║██║╚██╗██║██╔══██╗[/#00ff41]\n"
+        "  [#00ff41]██║  ██╗╚██████╔╝██║ ╚████║██║  ██║[/#00ff41]\n"
+        "  [#00ff41]╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝[/#00ff41]\n"
+    )
+
     def __init__(self, info: dict[str, str], **kwargs) -> None:
         label_w = max((len(k) for k in info), default=6) + 2
-        lines = ["\n"]
+        lines = ["\n", self._LOGO, "\n"]
         for label, value in info.items():
             pad = " " * (label_w - len(label))
             wrapped = _wrap(value, 60)

@@ -56,6 +56,15 @@ info "Installing dependencies..."
 uv pip install -e ".[dev]"
 success "Dependencies installed"
 
+# ── Create .env if missing ───────────────────────────────────────────
+if [ ! -f .env ]; then
+    cp .env.example .env
+    success ".env created from .env.example"
+    warn "Add your ANTHROPIC_API_KEY to .env before running konr"
+else
+    success ".env already exists — skipping"
+fi
+
 # ── Done ─────────────────────────────────────────────────────────────
 echo ""
 success "KonR is ready"
