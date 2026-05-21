@@ -45,11 +45,7 @@ class CostTracker:
     output_tokens: int = 0
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
-
-    _INPUT_PRICE  = config.SONNET_INPUT_PRICE
-    _OUTPUT_PRICE = config.SONNET_OUTPUT_PRICE
-    _CACHE_READ   = config.CACHE_READ_PRICE
-    _CACHE_WRITE  = config.CACHE_WRITE_PRICE
+    total_usd: float = 0.0
 
     def add(
         self,
@@ -57,21 +53,14 @@ class CostTracker:
         output_tokens: int = 0,
         cache_read_tokens: int = 0,
         cache_write_tokens: int = 0,
+        cost_usd: float = 0.0,
     ) -> None:
-        """Accumulate token counts from a single API response."""
+        """Accumulate token counts and pre-computed cost from a single API response."""
         self.input_tokens       += input_tokens
         self.output_tokens      += output_tokens
         self.cache_read_tokens  += cache_read_tokens
         self.cache_write_tokens += cache_write_tokens
-
-    @property
-    def total_usd(self) -> float:
-        return (
-            self.input_tokens       * self._INPUT_PRICE
-            + self.output_tokens    * self._OUTPUT_PRICE
-            + self.cache_read_tokens  * self._CACHE_READ
-            + self.cache_write_tokens * self._CACHE_WRITE
-        )
+        self.total_usd          += cost_usd
 
     def as_dict(self) -> dict[str, Any]:
         """Serialisable snapshot of all counters plus computed total_usd."""
@@ -244,21 +233,26 @@ class Session:
         cache_read_tokens: int = 0,
         cache_write_tokens: int = 0,
         agent: str | None = None,
+        model: str = "",
     ) -> None:
+        cost_usd = config.compute_cost_usd(
+            model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens
+        )
         self.cost.add(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
             cache_write_tokens=cache_write_tokens,
+            cost_usd=cost_usd,
         )
         if agent:
-            if agent not in self.agent_costs:
-                self.agent_costs[agent] = CostTracker()
+            self.agent_costs.setdefault(agent, CostTracker())
             self.agent_costs[agent].add(
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cache_read_tokens=cache_read_tokens,
                 cache_write_tokens=cache_write_tokens,
+                cost_usd=cost_usd,
             )
         agent_costs_snapshot = {
             k: round(v.total_usd, 4) for k, v in self.agent_costs.items()

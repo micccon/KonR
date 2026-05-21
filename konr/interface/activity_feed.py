@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,18 +21,23 @@ _ENTRY_STYLE: dict[str, tuple[str, str]] = {
 
 
 def _agent_base_name(agent: str) -> str:
-    """Strip _1/_2 instance suffix for color lookup."""
-    return _INSTANCE_SUFFIX.sub('', agent)
+    """Strip _1/_2 instance suffix and verifier specialist suffix for color lookup."""
+    name = _INSTANCE_SUFFIX.sub('', agent)
+    if name.startswith("verifier_"):
+        return "verifier"
+    return name
 
 AGENT_COLORS: dict[str, str] = {
     "recon":           "#00ff41",
     "osint":           "#00ffcc",
     "web":             "#ffff00",
     "network_exploit": "#ff9900",
-    "ad":              "#ff6600",
+    "ad":              "#aaaaaa",
     "postexploit":     "#ff3300",
     "coder":           "#00aaff",
-    "orchestrator":    "#00ff41",
+    "summarizer":      "#ff69b4",
+    "verifier":        "#cc44ff",
+    "orchestrator":    "#ff00ff",
     "you":             "#ffffff",
     "system":          "#004422",
 }
@@ -66,6 +72,8 @@ class ActivityFeed(RichLog):
         self._log_fh    = None
         self._verbose   = False
         self._filter: str | None = None
+        self._last_write_time: float = 0.0
+        self._idle_active = True
         # (agent, content, entry_type) — kept for filter re-renders
         self._all_lines: list[tuple[str, str, str]] = []
 
@@ -73,9 +81,14 @@ class ActivityFeed(RichLog):
         self.wrap      = True
         self.highlight = False
         self.markup    = True
+        self._last_write_time = time.monotonic()
+        self.set_interval(15, self._check_idle)
         if self._log_file:
-            self._log_file.parent.mkdir(parents=True, exist_ok=True)
-            self._log_fh = open(self._log_file, "a", encoding="utf-8")  # noqa: SIM115
+            try:
+                self._log_file.parent.mkdir(parents=True, exist_ok=True)
+                self._log_fh = open(self._log_file, "a", encoding="utf-8")  # noqa: SIM115
+            except OSError:
+                pass
 
     def on_unmount(self) -> None:
         if self._log_fh:
@@ -83,9 +96,22 @@ class ActivityFeed(RichLog):
 
     # ── Public API ────────────────────────────────────────────────────────
 
+    def stop_idle_check(self) -> None:
+        """Call when engagement finishes so idle heartbeat stops."""
+        self._idle_active = False
+
+    def set_paused(self, paused: bool) -> None:
+        """Suppress idle heartbeat while session is paused."""
+        self._idle_active = not paused
+
+    def _check_idle(self) -> None:
+        if self._idle_active and self._all_lines and time.monotonic() - self._last_write_time >= 15:
+            self.add_line("system", "Still working...", "system")
+
     def add_line(self, agent: str, content: str, entry_type: str = "output") -> None:
+        self._last_write_time = time.monotonic()
         self._all_lines.append((agent, content, entry_type))
-        if self._filter is None or agent == self._filter or agent == "system":
+        if self._filter is None or agent == self._filter:
             self._write_line(agent, content, entry_type)
         if self._log_fh:
             ts = datetime.now(UTC).strftime("%H:%M:%S")
@@ -105,7 +131,7 @@ class ActivityFeed(RichLog):
         self._filter = agent
         self.clear()
         for ag, content, entry_type in self._all_lines:
-            if agent is None or ag == agent or ag == "system":
+            if agent is None or ag == agent:
                 self._write_line(ag, content, entry_type)
         self.scroll_end(animate=False)
 

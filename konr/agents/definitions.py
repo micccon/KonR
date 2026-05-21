@@ -194,6 +194,44 @@ DELEGATE_TO_CODER: dict[str, Any] = {
     },
 }
 
+UPDATE_STATE: dict[str, Any] = {
+    "name": "update_state",
+    "description": (
+        "Record a key discovery to your persistent state. "
+        "Call this after every confirmed finding, identified service, working credential, "
+        "or important observation. State persists across the entire run even when old "
+        "messages are trimmed from context."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "category": {
+                "type": "string",
+                "enum": ["hosts", "services", "credentials", "vulnerabilities", "findings", "tried"],
+                "description": (
+                    "hosts: live hosts found. "
+                    "services: open ports/services identified. "
+                    "credentials: working username/password/session. "
+                    "vulnerabilities: actively confirmed issues. "
+                    "findings: unverified leads, CVE matches, candidates. "
+                    "tried: approaches attempted (success or failure) — prevents re-testing."
+                ),
+            },
+            "entry": {
+                "type": "string",
+                "description": (
+                    "Concise one-line description. Examples: "
+                    "'172.17.0.2:8000 HTTP Flask login page, Werkzeug 3.1.8' | "
+                    "'admin:admin123 works on /login via SQLi' | "
+                    "'SQLi auth bypass on /login — CRITICAL confirmed' | "
+                    "'tried UDS SecurityAccess key derivation XOR/NOT/seed+1 — all failed'"
+                ),
+            },
+        },
+        "required": ["category", "entry"],
+    },
+}
+
 TASK_COMPLETE: dict[str, Any] = {
     "name": "task_complete",
     "description": (
@@ -215,6 +253,7 @@ TASK_COMPLETE: dict[str, Any] = {
         },
         "required": ["summary"],
     },
+    "cache_control": {"type": "ephemeral"},
 }
 
 # ── Tool sets ─────────────────────────────────────────────────────────────────
@@ -223,11 +262,15 @@ SPECIALIST_TOOLS: list[dict[str, Any]] = [
     EXECUTE_COMMAND,
     READ_FILE,
     WRITE_FILE,
-    STORE_FINDING,
     REQUEST_APPROVAL,
     SEARCH_MEMORY,
     DELEGATE_TO_CODER,
+    UPDATE_STATE,
     TASK_COMPLETE,
 ]
 
-TOOL_NAMES: set[str] = {t["name"] for t in SPECIALIST_TOOLS}
+VERIFIER_TOOLS: list[dict[str, Any]] = [
+    STORE_FINDING,
+    TASK_COMPLETE,
+]
+

@@ -86,14 +86,18 @@ class FindingsDB:
         os: str | None = None,
         os_version: str | None = None,
         role: str | None = None,
-    ) -> int:
-        """Insert a host or enrich an existing one (never overwrites with null). Returns the host ID."""
+    ) -> tuple[int, bool]:
+        """Insert a host or enrich an existing one (never overwrites with null). Returns (host_id, created)."""
+        existing = self._conn.execute(
+            "SELECT id FROM hosts WHERE engagement_id = ? AND ip = ?",
+            (engagement_id, ip),
+        ).fetchone()
+        created = existing is None
         self._conn.execute(
             """
             INSERT INTO hosts (engagement_id, ip, hostname, os, os_version, role)
             VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(engagement_id, ip) DO UPDATE SET
-                -- COALESCE: only overwrite an existing value if the new value is non-null
                 hostname   = COALESCE(excluded.hostname,   hostname),
                 os         = COALESCE(excluded.os,         os),
                 os_version = COALESCE(excluded.os_version, os_version),
@@ -106,7 +110,7 @@ class FindingsDB:
             "SELECT id FROM hosts WHERE engagement_id = ? AND ip = ?",
             (engagement_id, ip),
         ).fetchone()
-        return row["id"]
+        return row["id"], created
 
     def get_hosts(self, engagement_id: int) -> list[dict[str, Any]]:
         """Return all hosts for an engagement, ordered by IP."""
@@ -127,8 +131,14 @@ class FindingsDB:
         service_name: str | None = None,
         version: str | None = None,
         banner: str | None = None,
-    ) -> int:
-        """Insert a service or enrich an existing one (keyed on host_id + port + protocol). Returns the service ID."""
+    ) -> tuple[int, bool]:
+        """Insert a service or enrich an existing one (keyed on host_id + port + protocol). Returns (service_id, created)."""
+        protocol = protocol.lower()
+        existing = self._conn.execute(
+            "SELECT id FROM services WHERE host_id = ? AND port = ? AND protocol = ?",
+            (host_id, port, protocol),
+        ).fetchone()
+        created = existing is None
         self._conn.execute(
             """
             INSERT INTO services (host_id, port, protocol, service_name, version, banner)
@@ -136,7 +146,7 @@ class FindingsDB:
             ON CONFLICT(host_id, port, protocol) DO UPDATE SET
                 service_name = COALESCE(excluded.service_name, service_name),
                 version      = COALESCE(excluded.version,      version),
-                banner       = COALESCE(excluded.banner,       banner)  -- never clobber with null
+                banner       = COALESCE(excluded.banner,       banner)
             """,
             (host_id, port, protocol, service_name, version, banner),
         )
@@ -145,7 +155,7 @@ class FindingsDB:
             "SELECT id FROM services WHERE host_id = ? AND port = ? AND protocol = ?",
             (host_id, port, protocol),
         ).fetchone()
-        return row["id"]
+        return row["id"], created
 
     def get_services(self, host_id: int) -> list[dict[str, Any]]:
         """Return all services for a host, ordered by port number."""
@@ -175,7 +185,13 @@ class FindingsDB:
         status: str = "confirmed",
         agent: str | None = None,
         mitre_id: str | None = None,
-    ) -> int:
+    ) -> tuple[int, bool]:
+        existing = self._conn.execute(
+            "SELECT id FROM vulnerabilities WHERE engagement_id = ? AND title = ? AND host_id IS ?",
+            (engagement_id, title, host_id),
+        ).fetchone()
+        if existing:
+            return existing["id"], False
         cur = self._conn.execute(
             """
             INSERT INTO vulnerabilities
@@ -191,7 +207,7 @@ class FindingsDB:
             ),
         )
         self._conn.commit()
-        return cur.lastrowid  # type: ignore[return-value]
+        return cur.lastrowid, True  # type: ignore[return-value]
 
     def get_vulnerabilities(
         self, engagement_id: int, severity: str | None = None
@@ -226,7 +242,13 @@ class FindingsDB:
         access_level: str | None = None,
         source_tool: str | None = None,
         validity: str = "unknown",
-    ) -> int:
+    ) -> tuple[int, bool]:
+        existing = self._conn.execute(
+            "SELECT id FROM credentials WHERE engagement_id = ? AND username = ? AND host_id IS ?",
+            (engagement_id, username, host_id),
+        ).fetchone()
+        if existing:
+            return existing["id"], False
         cur = self._conn.execute(
             """
             INSERT INTO credentials
@@ -240,7 +262,7 @@ class FindingsDB:
             ),
         )
         self._conn.commit()
-        return cur.lastrowid  # type: ignore[return-value]
+        return cur.lastrowid, True  # type: ignore[return-value]
 
     def get_credentials(self, engagement_id: int) -> list[dict[str, Any]]:
         """Return all credentials for an engagement, ordered by discovery time."""
@@ -261,7 +283,13 @@ class FindingsDB:
         *,
         status: str = "identified",
         mitre_techniques: list[str] | None = None,
-    ) -> int:
+    ) -> tuple[int, bool]:
+        existing = self._conn.execute(
+            "SELECT id FROM attack_chains WHERE engagement_id = ? AND title = ?",
+            (engagement_id, title),
+        ).fetchone()
+        if existing:
+            return existing["id"], False
         cur = self._conn.execute(
             """
             INSERT INTO attack_chains
@@ -278,7 +306,7 @@ class FindingsDB:
             ),
         )
         self._conn.commit()
-        return cur.lastrowid  # type: ignore[return-value]
+        return cur.lastrowid, True  # type: ignore[return-value]
 
     def get_attack_chains(self, engagement_id: int) -> list[dict[str, Any]]:
         """Return attack chains with steps and MITRE techniques deserialised from JSON."""
@@ -303,7 +331,13 @@ class FindingsDB:
         *,
         flag_type: str | None = None,
         context: str | None = None,
-    ) -> int:
+    ) -> tuple[int, bool]:
+        existing = self._conn.execute(
+            "SELECT id FROM flags WHERE engagement_id = ? AND flag_value = ?",
+            (engagement_id, flag_value),
+        ).fetchone()
+        if existing:
+            return existing["id"], False
         cur = self._conn.execute(
             """
             INSERT INTO flags (engagement_id, flag_value, flag_type, context)
@@ -312,7 +346,7 @@ class FindingsDB:
             (engagement_id, flag_value, flag_type, context),
         )
         self._conn.commit()
-        return cur.lastrowid  # type: ignore[return-value]
+        return cur.lastrowid, True  # type: ignore[return-value]
 
     def get_flags(self, engagement_id: int) -> list[dict[str, Any]]:
         """Return all captured flags ordered by discovery time."""

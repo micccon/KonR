@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv \
     golang \
     gcc g++ make \
+    xxd openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # ── OSINT ─────────────────────────────────────────────────────────────────────
@@ -70,6 +71,7 @@ RUN pip3 install --no-cache-dir --break-system-packages bloodhound
 RUN apt-get update && apt-get install -y --no-install-recommends \
     john \
     hashcat \
+    sshpass \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /opt/privesc \

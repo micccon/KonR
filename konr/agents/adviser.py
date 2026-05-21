@@ -19,33 +19,14 @@ class Adviser(SingleCallLLMAgent):
     def __init__(self) -> None:
         super().__init__(model=config.HAIKU_MODEL, system_prompt=_SYSTEM_PROMPT)
 
-    async def generate(
-        self,
-        agent_name: str,
-        task: str,
-        recent_calls: list[tuple[str, dict]],
-        findings_summary: str = "",
-    ) -> str:
+    async def generate(self, agent_name: str, task: str, findings_summary: str = "") -> str:
         """Generate a single actionable suggestion for an agent that has repeated the same tool call."""
-        user_message = _build_user_message(agent_name, task, recent_calls, findings_summary)
+        user_message = _build_user_message(agent_name, task, findings_summary)
         return await self._call(user_message, max_tokens=256)
 
 
-def _build_user_message(
-    agent_name: str,
-    task: str,
-    recent_calls: list[tuple[str, dict]],
-    findings_summary: str,
-) -> str:
-    """Format the adviser prompt with agent context and repeated call history."""
-    parts = [
-        f"Agent: {agent_name}",
-        f"Task: {task}",
-    ]
-    if recent_calls:
-        parts.append("Recent repeated calls:")
-        for tool, args in recent_calls:
-            parts.append(f"  - {tool}({args})")
+def _build_user_message(agent_name: str, task: str, findings_summary: str) -> str:
+    parts = [f"Agent: {agent_name}", f"Task: {task}"]
     if findings_summary:
         parts.append(f"Relevant findings so far:\n{findings_summary}")
     parts.append("Suggest one specific alternative approach.")

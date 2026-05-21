@@ -222,8 +222,6 @@ class Orchestrator:
             hint = await self._adviser.generate(
                 agent_name=event.agent or "?",
                 task=event.data.get("reason", ""),
-                recent_calls=[],
-                findings_summary="",
             )
             await self.session.user_messages.put(f"[adviser] {hint}")
         except Exception:
@@ -325,10 +323,70 @@ class Orchestrator:
         context = _build_context(task, completed, self.ctf_mode, peer_types or set())
 
         result = await agent.run(task_prompt, context)
+        if await self._run_summarizer(agent):
+            await self._run_verifier(agent, task)
         return TaskOutcome(task=task, agent_result=result)
+
+    async def _run_summarizer(self, specialist: BaseAgent) -> bool:
+        """Generate a structured summary of the specialist's run using Haiku. Returns True on success."""
+        from konr.agents.summarizer import SummarizerAgent
+        await self.bus.publish(
+            EventBus.make(EventType.SUMMARIZER_STARTED, agent="summarizer", specialist=specialist.name)
+        )
+        try:
+            summarizer = SummarizerAgent()
+            await summarizer.summarize(specialist.name, specialist._messages)
+            await self.bus.publish(
+                EventBus.make(EventType.SUMMARIZER_FINISHED, agent="summarizer", specialist=specialist.name)
+            )
+            return True
+        except Exception as exc:
+            await self.bus.publish(
+                EventBus.make(
+                    EventType.AGENT_ERROR, agent="summarizer",
+                    reason=f"Summary generation failed for {specialist.name}: {exc}",
+                )
+            )
+            return False
+
+    async def _run_verifier(self, specialist: BaseAgent, task: Task) -> None:
+        """Run VerifierAgent after a specialist completes, injecting the specialist's summary."""
+        from konr.agents.specialists.verifier import VerifierAgent
+
+        summary_path = config.WORK_DIR / f"{specialist.name}_summary.md"
+        if not summary_path.exists():
+            await self.bus.publish(
+                EventBus.make(
+                    EventType.AGENT_ERROR, agent="verifier",
+                    reason=f"No summary file for {specialist.name} — skipping verification",
+                )
+            )
+            return
+
+        summary_content = summary_path.read_text(encoding="utf-8")
+        verifier = VerifierAgent(
+            engagement_id=self.session.engagement_id,
+            session=self.session,
+            bus=self.bus,
+            db=self.db,
+            executor=self.executor,
+            memory=self._memory,
+            specialist_name=specialist.name,
+        )
+        await self.bus.publish(
+            EventBus.make(EventType.VERIFIER_STARTED, agent="verifier", specialist=specialist.name)
+        )
+        await verifier.run(
+            task=f"Store all findings from the {specialist.name} summary for {task.target}",
+            context={"specialist_summary": summary_content},
+        )
+        await self.bus.publish(
+            EventBus.make(EventType.VERIFIER_FINISHED, agent="verifier", specialist=specialist.name)
+        )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _topo_layers(
     tasks: list[Task],

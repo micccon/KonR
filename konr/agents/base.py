@@ -67,6 +67,15 @@ class BaseAgent(ToolHandlerMixin):
         self._tool_call_count = 0
         self._recent_calls: deque[str] = deque(maxlen=config.STUCK_THRESHOLD)
         self._findings_count = 0
+        self._messages: list[dict[str, Any]] = []
+        self._agent_state: dict[str, list[str]] = {
+            "hosts": [],
+            "services": [],
+            "credentials": [],
+            "vulnerabilities": [],
+            "findings": [],
+            "tried": [],
+        }
 
     # ── Subclass interface ────────────────────────────────────────────────────
 
@@ -90,6 +99,7 @@ class BaseAgent(ToolHandlerMixin):
         await self.bus.publish(
             EventBus.make(EventType.AGENT_STARTED, agent=self.name, task=task)
         )
+        self._seed_state_from_db()
 
         messages: list[dict[str, Any]] = [
             {"role": "user", "content": self._build_initial_message(task, context or {})}
@@ -128,6 +138,7 @@ class BaseAgent(ToolHandlerMixin):
         while self._tool_call_count < self._max_tool_calls:
             await self.session.wait_if_paused()
             if self.session.state in (SessionState.STOPPING, SessionState.DONE):
+                self._messages = messages
                 return AgentResult(
                     success=True,
                     summary="Stopped by user",
@@ -136,6 +147,7 @@ class BaseAgent(ToolHandlerMixin):
 
             if self.session.skip_event.is_set():
                 self.session.skip_event.clear()
+                self._messages = messages
                 return AgentResult(
                     success=True,
                     summary="Skipped by user request",
@@ -156,6 +168,23 @@ class BaseAgent(ToolHandlerMixin):
                     "type": "text",
                     "text": f"\nUser constraints (always follow):\n{pins}",
                 })
+            state_text = self._render_state()
+            if state_text:
+                system.append({
+                    "type": "text",
+                    "text": f"\nDiscoveries recorded this run (persists across context trimming):\n{state_text}",
+                })
+
+            remaining = self._max_tool_calls - self._tool_call_count
+            if remaining <= 4:
+                system.append({
+                    "type": "text",
+                    "text": (
+                        f"\n⚠️ WRAP UP NOW: {remaining} tool calls remaining. "
+                        "Finish your current work and call task_complete. "
+                        "Do not start any new commands or investigations."
+                    ),
+                })
 
             response = await asyncio.to_thread(
                 _api_call_with_retry,
@@ -169,11 +198,13 @@ class BaseAgent(ToolHandlerMixin):
                 cache_read_tokens=getattr(response.usage, "cache_read_input_tokens", 0),
                 cache_write_tokens=getattr(response.usage, "cache_creation_input_tokens", 0),
                 agent=self.name,
+                model=self.model,
             )
 
             messages.append({"role": "assistant", "content": response.content})
 
             if response.stop_reason == "end_turn":
+                self._messages = messages
                 return AgentResult(
                     success=True,
                     summary=extract_text(response.content),
@@ -181,6 +212,7 @@ class BaseAgent(ToolHandlerMixin):
                 )
 
             if response.stop_reason != "tool_use":
+                self._messages = messages
                 return AgentResult(
                     success=False,
                     summary="",
@@ -198,6 +230,7 @@ class BaseAgent(ToolHandlerMixin):
 
             for result in tool_results:
                 if result.get("_task_complete"):
+                    self._messages = messages
                     return AgentResult(
                         success=True,
                         summary=result["_summary"],
@@ -206,6 +239,7 @@ class BaseAgent(ToolHandlerMixin):
 
             messages.append({"role": "user", "content": tool_results})
 
+        self._messages = messages
         return AgentResult(
             success=False,
             summary="",
@@ -286,14 +320,16 @@ class BaseAgent(ToolHandlerMixin):
                 return await self._handle_read_file(inputs)
             case "write_file":
                 return await self._handle_write_file(inputs)
-            case "store_finding":
-                return await self._handle_store_finding(inputs)
             case "request_approval":
                 return await self._handle_request_approval(inputs)
             case "search_memory":
                 return await self._handle_search_memory(inputs)
             case "delegate_to_coder":
                 return await self._handle_delegate_to_coder(inputs)
+            case "store_finding":
+                return "store_finding is verifier-only — specialists do not store findings directly."
+            case "update_state":
+                return self._handle_update_state(inputs)
             case "task_complete":
                 return self._handle_task_complete(inputs)
             case _:
@@ -320,7 +356,12 @@ class BaseAgent(ToolHandlerMixin):
         """Build the first user message, injecting dependency results and confirmed DB findings."""
         parts = [f"Task: {task}"]
         if context:
-            deps = context.get("dependency_results", [])
+            # Extract specialist_summary before JSON-dumping context — it's a long formatted
+            # string that reads better as a dedicated section than embedded in JSON.
+            specialist_summary = context.get("specialist_summary")
+            ctx_rest = {k: v for k, v in context.items() if k != "specialist_summary"}
+
+            deps = ctx_rest.get("dependency_results", [])
             if deps:
                 # Emit structured findings from prior agents so this agent can act on them
                 # without re-discovering what was already found.
@@ -332,31 +373,53 @@ class BaseAgent(ToolHandlerMixin):
                         "findings_count": d["findings_count"],
                         "summary": d["summary"],
                     }
-                    # Pull confirmed credentials and vulns out of the DB for direct use
-                    try:
-                        creds = self.db.get_credentials(self.engagement_id)
-                        if creds:
-                            entry["confirmed_credentials"] = [
-                                {"username": c.get("username"), "secret": c.get("secret"),
-                                 "secret_type": c.get("secret_type"), "domain": c.get("domain")}
-                                for c in creds
-                            ]
-                        vulns = self.db.get_vulnerabilities(self.engagement_id)
-                        if vulns:
-                            entry["confirmed_vulnerabilities"] = [
-                                {"title": v.get("title"), "severity": v.get("severity"),
-                                 "description": v.get("description", "")[:200]}
-                                for v in vulns
-                            ]
-                    except Exception:
-                        pass
                     structured.append(entry)
                 parts.append(
                     "Prior agent findings (use these directly — do not rediscover):\n"
                     + json.dumps(structured, indent=2)
                 )
-            parts.append(f"Full context:\n{json.dumps(context, indent=2)}")
+            if ctx_rest:
+                parts.append(f"Full context:\n{json.dumps(ctx_rest, indent=2)}")
+            if specialist_summary:
+                parts.append(f"## Specialist Summary\n\n{specialist_summary}")
         return "\n\n".join(parts)
+
+    def _render_state(self) -> str:
+        """Render compact state as a text block for injection into the system prompt."""
+        parts = []
+        for category, items in self._agent_state.items():
+            if items:
+                lines = "\n".join(f"  - {item}" for item in items)
+                parts.append(f"{category.upper()}:\n{lines}")
+        return "\n".join(parts)
+
+    def _seed_state_from_db(self) -> None:
+        """Pre-populate state from confirmed DB findings so agents don't re-discover prior work."""
+        try:
+            hosts = self.db.get_hosts(self.engagement_id)
+            for h in hosts:
+                self._agent_state["hosts"].append(
+                    f"{h.get('ip')} os={h.get('os') or 'unknown'}"
+                )
+                for svc in self.db.get_services(h["id"]):
+                    self._agent_state["services"].append(
+                        f"{h.get('ip')}:{svc.get('port')}/{svc.get('protocol','tcp')} "
+                        f"{svc.get('service_name','') or ''} {svc.get('version','') or ''}".strip()
+                    )
+            for c in self.db.get_credentials(self.engagement_id):
+                self._agent_state["credentials"].append(
+                    f"{c.get('username')} on {c.get('ip','?')} "
+                    f"access={c.get('access_level','unknown')}"
+                )
+            for v in self.db.get_vulnerabilities(self.engagement_id):
+                if v.get("severity") != "finding":
+                    self._agent_state["vulnerabilities"].append(
+                        f"{v.get('title')} [{v.get('severity')}] on {v.get('ip','?')}"
+                    )
+                else:
+                    self._agent_state["findings"].append(v.get("title", ""))
+        except Exception:
+            pass
 
     def _drain_user_messages(self, messages: list) -> None:
         """Inject any pending user guidance into the last message."""

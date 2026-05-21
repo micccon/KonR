@@ -34,6 +34,14 @@ class EventType(StrEnum):
     CRED_FOUND       = "finding.cred"
     FLAG_FOUND       = "finding.flag"
 
+    # Summarizer lifecycle
+    SUMMARIZER_STARTED  = "summarizer.started"
+    SUMMARIZER_FINISHED = "summarizer.finished"
+
+    # Verifier lifecycle
+    VERIFIER_STARTED = "verifier.started"
+    VERIFIER_FINISHED = "verifier.finished"
+
     # Engagement lifecycle
     PHASE_STARTED    = "phase.started"
     PHASE_FINISHED   = "phase.finished"

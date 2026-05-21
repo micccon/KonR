@@ -42,6 +42,10 @@ class TaskTree(Widget):
         # phase_num → {"status": str, "agents": {name: status}}
         self._phases: dict[int, dict] = {}
         self._agent_counts: dict[str, int] = {}
+        # specialist_name → summarizer status ("active" | "done" | "error")
+        self._summarizers: dict[str, str] = {}
+        # specialist_name → verifier status ("active" | "done" | "error")
+        self._verifiers: dict[str, str] = {}
 
     def compose(self):
         yield Static("", id="tree-content", markup=True)
@@ -80,6 +84,26 @@ class TaskTree(Widget):
                 else:
                     lines.append(f"  [#003311]├ {a_icon} {display}[/#003311]")
 
+                s_status = self._summarizers.get(agent_name)
+                v_status = self._verifiers.get(agent_name)
+                if s_status:
+                    s_icon = ICONS.get(s_status, "○")
+                    connector = "├" if v_status else "└"
+                    if s_status == "active":
+                        lines.append(f"  [#ff69b4]│  {connector} {s_icon} summarizer[/#ff69b4]")
+                    elif s_status == "done":
+                        lines.append(f"  [#99334d]│  {connector} {s_icon} summarizer[/#99334d]")
+                    else:
+                        lines.append(f"  [#ff3333]│  {connector} {s_icon} summarizer[/#ff3333]")
+                if v_status:
+                    v_icon = ICONS.get(v_status, "○")
+                    if v_status == "active":
+                        lines.append(f"  [#00ff41]│  └ {v_icon} verifier[/#00ff41]")
+                    elif v_status == "done":
+                        lines.append(f"  [#007722]│  └ {v_icon} verifier[/#007722]")
+                    else:
+                        lines.append(f"  [#ff3333]│  └ {v_icon} verifier[/#ff3333]")
+
         return "\n".join(lines)
 
     def _refresh_content(self) -> None:
@@ -116,12 +140,14 @@ class TaskTree(Widget):
 
     def _set_task_status(self, agent: str, status: str) -> None:
         count = max(0, self._agent_counts.get(agent, 1) - 1)
-        self._agent_counts[agent] = count
         if count == 0:
+            self._agent_counts.pop(agent, None)
             for info in self._phases.values():
                 if agent in info.get("agents", {}):
                     info["agents"][agent] = status
                     break
+        else:
+            self._agent_counts[agent] = count
         self._refresh_content()
 
     def set_task_done(self, agent: str) -> None:
@@ -129,6 +155,30 @@ class TaskTree(Widget):
 
     def set_task_error(self, agent: str) -> None:
         self._set_task_status(agent, "error")
+
+    def set_summarizer_active(self, specialist: str) -> None:
+        self._summarizers[specialist] = "active"
+        self._refresh_content()
+
+    def set_summarizer_done(self, specialist: str) -> None:
+        self._summarizers[specialist] = "done"
+        self._refresh_content()
+
+    def set_summarizer_error(self, specialist: str) -> None:
+        self._summarizers[specialist] = "error"
+        self._refresh_content()
+
+    def set_verifier_active(self, specialist: str) -> None:
+        self._verifiers[specialist] = "active"
+        self._refresh_content()
+
+    def set_verifier_done(self, specialist: str) -> None:
+        self._verifiers[specialist] = "done"
+        self._refresh_content()
+
+    def set_verifier_error(self, specialist: str) -> None:
+        self._verifiers[specialist] = "error"
+        self._refresh_content()
 
 
 def _resolve_display_name(agent_name: str) -> str:

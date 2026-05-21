@@ -101,7 +101,7 @@ class ToolHandlerMixin:
             self._findings_count += 1
             match finding_type:
                 case "host":
-                    host_id = await asyncio.to_thread(
+                    host_id, created = await asyncio.to_thread(
                         self.db.upsert_host,
                         self.engagement_id,
                         data["ip"],
@@ -110,6 +110,9 @@ class ToolHandlerMixin:
                         os_version=data.get("os_version"),
                         role=data.get("role"),
                     )
+                    if not created:
+                        self._findings_count -= 1
+                        return f"Already stored: {data['ip']} (id={host_id})"
                     await self.bus.publish(
                         EventBus.make(EventType.HOST_FOUND, agent=self.name, ip=data["ip"])
                     )
@@ -121,10 +124,10 @@ class ToolHandlerMixin:
                     return f"Host stored: {data['ip']} (id={host_id})"
 
                 case "service":
-                    host_id = await asyncio.to_thread(
+                    host_id, _ = await asyncio.to_thread(
                         self.db.upsert_host, self.engagement_id, data["ip"]
                     )
-                    svc_id = await asyncio.to_thread(
+                    svc_id, created = await asyncio.to_thread(
                         self.db.upsert_service,
                         host_id,
                         int(data["port"]),
@@ -133,6 +136,9 @@ class ToolHandlerMixin:
                         version=data.get("version"),
                         banner=data.get("banner"),
                     )
+                    if not created:
+                        self._findings_count -= 1
+                        return f"Already stored: {data['ip']}:{data['port']} (id={svc_id})"
                     await self.bus.publish(
                         EventBus.make(
                             EventType.SERVICE_FOUND,
@@ -152,17 +158,17 @@ class ToolHandlerMixin:
                     host_id = None
                     service_id = None
                     if ip := data.get("ip"):
-                        host_id = await asyncio.to_thread(
+                        host_id, _ = await asyncio.to_thread(
                             self.db.upsert_host, self.engagement_id, ip
                         )
                         if port := data.get("port"):
-                            service_id = await asyncio.to_thread(
+                            service_id, _ = await asyncio.to_thread(
                                 self.db.upsert_service,
                                 host_id,
                                 int(port),
                                 protocol=data.get("protocol", "tcp"),
                             )
-                    vuln_id = await asyncio.to_thread(
+                    vuln_id, created = await asyncio.to_thread(
                         self.db.add_vulnerability,
                         self.engagement_id,
                         data["title"],
@@ -178,6 +184,9 @@ class ToolHandlerMixin:
                         agent=self.name,
                         mitre_id=data.get("mitre_id"),
                     )
+                    if not created:
+                        self._findings_count -= 1
+                        return f"Already stored: {data['title']} (id={vuln_id})"
                     await self.bus.publish(
                         EventBus.make(
                             EventType.VULN_FOUND,
@@ -200,10 +209,10 @@ class ToolHandlerMixin:
                 case "credential":
                     host_id = None
                     if ip := data.get("ip"):
-                        host_id = await asyncio.to_thread(
+                        host_id, _ = await asyncio.to_thread(
                             self.db.upsert_host, self.engagement_id, ip
                         )
-                    cred_id = await asyncio.to_thread(
+                    cred_id, created = await asyncio.to_thread(
                         self.db.add_credential,
                         self.engagement_id,
                         host_id=host_id,
@@ -215,6 +224,9 @@ class ToolHandlerMixin:
                         source_tool=data.get("source_tool"),
                         validity=data.get("validity", "unknown"),
                     )
+                    if not created:
+                        self._findings_count -= 1
+                        return f"Already stored: {data.get('username', 'unknown')} (id={cred_id})"
                     await self.bus.publish(
                         EventBus.make(
                             EventType.CRED_FOUND,
@@ -233,7 +245,7 @@ class ToolHandlerMixin:
                     return f"Credential stored: {data.get('username', 'unknown')} (id={cred_id})"
 
                 case "attack_chain":
-                    chain_id = await asyncio.to_thread(
+                    chain_id, created = await asyncio.to_thread(
                         self.db.add_attack_chain,
                         self.engagement_id,
                         data["title"],
@@ -241,6 +253,9 @@ class ToolHandlerMixin:
                         data["severity"],
                         mitre_techniques=data.get("mitre_techniques"),
                     )
+                    if not created:
+                        self._findings_count -= 1
+                        return f"Already stored: {data['title']} (id={chain_id})"
                     return f"Attack chain stored: {data['title']} (id={chain_id})"
 
                 case "finding":
@@ -248,10 +263,10 @@ class ToolHandlerMixin:
                     # confirmed vulnerabilities and place it in the Unverified Leads section.
                     host_id = None
                     if ip := data.get("ip"):
-                        host_id = await asyncio.to_thread(
+                        host_id, _ = await asyncio.to_thread(
                             self.db.upsert_host, self.engagement_id, ip
                         )
-                    vuln_id = await asyncio.to_thread(
+                    vuln_id, created = await asyncio.to_thread(
                         self.db.add_vulnerability,
                         self.engagement_id,
                         data["title"],
@@ -260,6 +275,9 @@ class ToolHandlerMixin:
                         description=data.get("description"),
                         agent=self.name,
                     )
+                    if not created:
+                        self._findings_count -= 1
+                        return f"Already stored: {data['title']} (id={vuln_id})"
                     await self._store_to_memory(
                         f"Lead: {data['title']} — {data.get('description', '')[:300]}".strip(),
                         {"type": "finding", "target": data.get("ip", "")},
@@ -267,13 +285,16 @@ class ToolHandlerMixin:
                     return f"Intelligence lead stored: {data['title']} (id={vuln_id})"
 
                 case "flag":
-                    flag_id = await asyncio.to_thread(
+                    flag_id, created = await asyncio.to_thread(
                         self.db.add_flag,
                         self.engagement_id,
                         data["value"],
                         flag_type=data.get("flag_type"),
                         context=data.get("context"),
                     )
+                    if not created:
+                        self._findings_count -= 1
+                        return f"Already stored: {data['value']} (id={flag_id})"
                     await self.bus.publish(
                         EventBus.make(EventType.FLAG_FOUND, agent=self.name, value=data["value"])
                     )
@@ -373,9 +394,14 @@ class ToolHandlerMixin:
         query      = inputs["query"]
         collection = inputs.get("collection", "tool_outputs")
         n_results  = int(inputs.get("n_results", 3))
+        _global = frozenset({"knowledge", "techniques"})
+        where = (
+            None if collection in _global
+            else {"engagement_id": self.engagement_id}
+        )
         try:
             results = await asyncio.to_thread(
-                self._memory.search, collection, query, n_results=n_results
+                self._memory.search, collection, query, n_results=n_results, where=where
             )
         except Exception as exc:
             return f"Memory search failed: {exc}"
@@ -384,7 +410,9 @@ class ToolHandlerMixin:
         parts = []
         for r in results:
             meta = r.get("metadata", {})
-            header = f"({meta.get('agent', '?')} | {meta.get('target', '?')})"
+            agent  = meta.get("agent") or collection
+            target = meta.get("target") or "*"
+            header = f"({agent} | {target})"
             parts.append(f"{header}\n{r['content'][:config.MEMORY_RESULT_MAX_CHARS]}")
         return "\n\n---\n\n".join(parts)
 
@@ -407,6 +435,17 @@ class ToolHandlerMixin:
         if result.success:
             return result.summary or "CoderAgent completed but returned no summary."
         return f"CoderAgent failed: {result.error}"
+
+    def _handle_update_state(self, inputs: dict[str, Any]) -> str:
+        """Append an entry to the agent's compact state object."""
+        category = inputs.get("category", "findings")
+        entry = inputs.get("entry", "")
+        if not entry:
+            return "Error: entry cannot be empty"
+        if category not in self._agent_state:
+            return f"Unknown category: {category}. Use: hosts, services, credentials, vulnerabilities, findings, tried"
+        self._agent_state[category].append(entry)
+        return f"State updated [{category}]: {entry}"
 
     def _handle_task_complete(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """Return a sentinel dict that signals the loop to exit with this summary."""

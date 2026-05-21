@@ -76,6 +76,30 @@ class _AgentError(Message):
         self.agent = agent
 
 
+class _SummarizerStarted(Message):
+    def __init__(self, specialist: str) -> None:
+        super().__init__()
+        self.specialist = specialist
+
+
+class _SummarizerFinished(Message):
+    def __init__(self, specialist: str) -> None:
+        super().__init__()
+        self.specialist = specialist
+
+
+class _VerifierStarted(Message):
+    def __init__(self, specialist: str) -> None:
+        super().__init__()
+        self.specialist = specialist
+
+
+class _VerifierFinished(Message):
+    def __init__(self, specialist: str) -> None:
+        super().__init__()
+        self.specialist = specialist
+
+
 class _ApprovalNeeded(Message):
     def __init__(self, event: Event) -> None:
         super().__init__()
@@ -208,7 +232,7 @@ class _InfoPanel(Static):
 
 # ── Filter cycle ───────────────────────────────────────────────────────────────
 
-_FILTER_CYCLE = [None, "recon", "osint", "web", "network_exploit", "ad", "postexploit", "system"]
+_FILTER_CYCLE = [None, "recon", "osint", "web", "network_exploit", "ad", "postexploit", "summarizer", "verifier", "system"]
 
 
 # ── Main App ──────────────────────────────────────────────────────────────────
@@ -312,6 +336,11 @@ class KonrApp(App[None]):
     def check_action(self, action: str, parameters: tuple) -> bool | None:
         if action == "start_engagement":
             return not self._engagement_started and self._coro is not None
+        state = self.session.state
+        if action == "toggle_pause":
+            return state in (SessionState.RUNNING, SessionState.PAUSED)
+        if action == "skip_task":
+            return state == SessionState.RUNNING
         return True
 
     # ── Layout ────────────────────────────────────────────────────────────────
@@ -350,7 +379,7 @@ class KonrApp(App[None]):
 
     def on_mount(self) -> None:
         self._subscribe_bus()
-        asyncio.get_event_loop().create_task(self.bus.run())
+        asyncio.ensure_future(self.bus.run())
         if self._coro is not None and self._info:
             # READY state: hide feed; input stays visible but unfocused
             try:
@@ -374,9 +403,13 @@ class KonrApp(App[None]):
         sub = self.bus.subscribe
         sub(EventType.TOOL_CALLED,     self._on_tool_called)
         sub(EventType.TOOL_RESULT,     self._on_tool_result)
-        sub(EventType.AGENT_STARTED,   self._on_agent_started)
-        sub(EventType.AGENT_FINISHED,  self._on_agent_finished)
-        sub(EventType.AGENT_ERROR,     self._on_agent_error)
+        sub(EventType.AGENT_STARTED,    self._on_agent_started)
+        sub(EventType.AGENT_FINISHED,   self._on_agent_finished)
+        sub(EventType.AGENT_ERROR,      self._on_agent_error)
+        sub(EventType.SUMMARIZER_STARTED,  self._on_summarizer_started)
+        sub(EventType.SUMMARIZER_FINISHED, self._on_summarizer_finished)
+        sub(EventType.VERIFIER_STARTED, self._on_verifier_started)
+        sub(EventType.VERIFIER_FINISHED, self._on_verifier_finished)
         sub(EventType.AGENT_STUCK,     self._on_agent_stuck)
         sub(EventType.AGENT_THINKING,  self._on_agent_thinking)
         sub(EventType.PHASE_STARTED,   self._on_phase_started)
@@ -423,16 +456,38 @@ class KonrApp(App[None]):
             self.post_message(_ActivityLine(event.agent or "?", display, "output"))
 
     def _on_agent_started(self, event: Event) -> None:
+        if event.agent == "verifier":
+            return  # handled by _on_verifier_started
         self.post_message(_AgentStarted(event.agent or "?"))
         self.post_message(_ActivityLine(
             event.agent or "?", f"started — {event.data.get('task', '')}", "system"))
 
     def _on_agent_finished(self, event: Event) -> None:
+        if event.agent == "verifier":
+            return  # handled by _on_verifier_finished
         self.post_message(_AgentFinished(event.agent or "?"))
         summary = event.data.get("summary", "")
         if summary:
             self.post_message(_ActivityLine(
                 event.agent or "?", f"done — {summary[:120]}", "system"))
+
+    def _on_summarizer_started(self, event: Event) -> None:
+        specialist = event.data.get("specialist", "")
+        self.post_message(_SummarizerStarted(specialist))
+        self.post_message(_ActivityLine("summarizer", f"summarizing {specialist}", "system"))
+
+    def _on_summarizer_finished(self, event: Event) -> None:
+        specialist = event.data.get("specialist", "")
+        self.post_message(_SummarizerFinished(specialist))
+
+    def _on_verifier_started(self, event: Event) -> None:
+        specialist = event.data.get("specialist", "")
+        self.post_message(_VerifierStarted(specialist))
+        self.post_message(_ActivityLine("verifier", f"reviewing {specialist}", "system"))
+
+    def _on_verifier_finished(self, event: Event) -> None:
+        specialist = event.data.get("specialist", "")
+        self.post_message(_VerifierFinished(specialist))
 
     def _on_agent_error(self, event: Event) -> None:
         self.post_message(_AgentError(event.agent or "?"))
@@ -469,6 +524,7 @@ class KonrApp(App[None]):
         ))
 
     def _on_engagement_done(self, event: Event) -> None:
+        self.query_one("#feed", ActivityFeed).stop_idle_check()
         self.post_message(_ActivityLine("system", "Engagement complete.", "system"))
 
     def _on_session_stopped(self, event: Event) -> None:
@@ -505,7 +561,29 @@ class KonrApp(App[None]):
         self.query_one("#task-tree", TaskTree).set_task_done(msg.agent)
 
     def on__agent_error(self, msg: _AgentError) -> None:
-        self.query_one("#task-tree", TaskTree).set_task_error(msg.agent)
+        tree = self.query_one("#task-tree", TaskTree)
+        if msg.agent == "summarizer":
+            for specialist, status in tree._summarizers.items():
+                if status == "active":
+                    tree.set_summarizer_error(specialist)
+        elif msg.agent == "verifier":
+            for specialist, status in tree._verifiers.items():
+                if status == "active":
+                    tree.set_verifier_error(specialist)
+        else:
+            tree.set_task_error(msg.agent)
+
+    def on__summarizer_started(self, msg: _SummarizerStarted) -> None:
+        self.query_one("#task-tree", TaskTree).set_summarizer_active(msg.specialist)
+
+    def on__summarizer_finished(self, msg: _SummarizerFinished) -> None:
+        self.query_one("#task-tree", TaskTree).set_summarizer_done(msg.specialist)
+
+    def on__verifier_started(self, msg: _VerifierStarted) -> None:
+        self.query_one("#task-tree", TaskTree).set_verifier_active(msg.specialist)
+
+    def on__verifier_finished(self, msg: _VerifierFinished) -> None:
+        self.query_one("#task-tree", TaskTree).set_verifier_done(msg.specialist)
 
     def on__cost_updated(self, msg: _CostUpdated) -> None:
         sb = self.query_one(StatusBar)
@@ -539,15 +617,17 @@ class KonrApp(App[None]):
 
     async def action_toggle_pause(self) -> None:
         self.query_one(StatusBar).flash_hint("^\\")
+        feed = self.query_one("#feed", ActivityFeed)
         if self.session.state == SessionState.PAUSED:
             await self.session.resume()
+            feed.set_paused(False)
             self.query_one(StatusBar).set_status("RUNNING")
-            self.query_one("#feed", ActivityFeed).add_line("system", "Resumed.", "system")
+            feed.add_line("system", "Resumed.", "system")
         elif self.session.state == SessionState.RUNNING:
             await self.session.pause()
+            feed.set_paused(True)
             self.query_one(StatusBar).set_status("PAUSED")
-            self.query_one("#feed", ActivityFeed).add_line(
-                "system", "Paused — Ctrl+P to resume.", "system")
+            feed.add_line("system", "Paused — Ctrl+\\ to resume.", "system")
 
     async def action_skip_task(self) -> None:
         self.query_one(StatusBar).flash_hint("^X")
@@ -599,11 +679,6 @@ def _get_db():
 def _format_tool_call(tool: str, inp: dict) -> str:
     if tool == "execute_command":
         return f"$ {inp.get('command', '')}"
-    if tool == "store_finding":
-        ftype = inp.get("type", "?")
-        data  = inp.get("data", {})
-        label = data.get("ip", data.get("title", str(data)[:60]))
-        return f"[store:{ftype}] {label}"
     if tool == "request_approval":
         return f"[approval] {inp.get('command', '')}"
     if tool == "task_complete":

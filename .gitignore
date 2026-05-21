@@ -11,4 +11,9 @@ vpn/
 
 # Test artifacts
 test_containers/
+tests/previous_prompts/
+
+# Misc
+previous_prompts/
+docs/
 tests/

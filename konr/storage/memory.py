@@ -11,14 +11,14 @@ import chromadb.api
 
 from konr.core import config
 
-COLLECTIONS = frozenset(["tool_outputs", "techniques", "osint_data", "code_artifacts", "knowledge"])
+COLLECTIONS = frozenset(["tool_outputs", "techniques", "osint_data", "knowledge"])
 # Content above this size is summarized by Haiku before embedding — keeps token costs low
 # and avoids ChromaDB choking on very long documents.
 _SUMMARIZE_THRESHOLD = 16_000  # chars
 
 # Cosine distance cutoff — results past this threshold are too dissimilar to be useful.
 # ChromaDB returns distances in [0, 2]; 0.8 is roughly "tangentially related at best".
-_SEARCH_DISTANCE_MAX = 0.8
+_SEARCH_DISTANCE_MAX = 0.7
 
 
 class VectorMemory:
@@ -112,26 +112,20 @@ class VectorMemory:
 
         results = col.query(**kwargs)
 
-        return [
-            {"content": doc, "metadata": meta, "distance": dist}
-            for doc, meta, dist in zip(
-                results["documents"][0],
-                results["metadatas"][0],
-                results["distances"][0],
-            )
-            if dist < _SEARCH_DISTANCE_MAX
-        ]
-
-    def format_results(self, results: list[dict[str, Any]]) -> str:
-        """Format search results as a string suitable for inclusion in an agent message."""
-        if not results:
-            return "No relevant memory found."
-        parts = []
-        for r in results:
-            meta = r["metadata"]
-            header = f"({meta.get('agent', 'unknown')} | {meta.get('target', '?')})"
-            parts.append(f"{header}\n{r['content'][:config.MEMORY_RESULT_MAX_CHARS]}")
-        return "\n\n---\n\n".join(parts)
+        seen: set[int] = set()
+        deduped = []
+        for doc, meta, dist in zip(
+            results["documents"][0],
+            results["metadatas"][0],
+            results["distances"][0],
+        ):
+            if dist >= _SEARCH_DISTANCE_MAX:
+                continue
+            h = hash(doc)
+            if h not in seen:
+                seen.add(h)
+                deduped.append({"content": doc, "metadata": meta, "distance": dist})
+        return deduped
 
     # ── Deletion ──────────────────────────────────────────────────────────────
 

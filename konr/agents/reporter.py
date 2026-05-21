@@ -15,7 +15,11 @@ Given structured engagement findings, produce a complete Markdown report.
 
 Follow this structure exactly:
 1. Cover (client, engagement name, date, classification)
-2. Executive Summary (severity table, key findings bullets)
+2. Executive Summary:
+   - Severity table with columns: Severity | Count — include one row per level:
+     Critical, High, Medium, Low, Informational.
+     The Informational count comes from INFORMATIONAL_COUNT in the data (intelligence leads).
+   - Key findings bullets (2-5 sentences max)
 3. Scope & Methodology
 4. Detailed Findings — one section per vulnerability, ordered critical→low
 5. Attack Chains (if any)
@@ -79,12 +83,15 @@ def _build_user_message(findings: dict, mode: str) -> str:
 
     all_vulns = findings.get("vulnerabilities", [])
     confirmed_vulns = [v for v in all_vulns if v.get("severity") != "finding"]
-    leads = [v for v in all_vulns if v.get("severity") == "finding"]
+    confirmed_titles = {v.get("title", "").lower() for v in confirmed_vulns}
+    leads = [v for v in all_vulns if v.get("severity") == "finding"
+             and v.get("title", "").lower() not in confirmed_titles]
 
     parts = [
         f"Mode: {mode}",
         f"\nENGAGEMENT:\n{json.dumps(engagement, indent=2, default=str)}",
         f"\nSTATS (confirmed findings only — leads excluded):\n{json.dumps(stats, indent=2)}",
+        f"\nINFORMATIONAL_COUNT (intelligence leads — use for Informational row in severity table): {len(leads)}",
         f"\nHOSTS:\n{json.dumps(findings.get('hosts', []), indent=2, default=str)}",
         "\nVULNERABILITIES:\n"
         + json.dumps(confirmed_vulns, indent=2, default=str),

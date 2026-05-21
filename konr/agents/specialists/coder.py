@@ -66,21 +66,14 @@ python3 /work/artifacts/<name>.py <target> <port> 2>&1 | tee /work/artifacts/<na
 ```
 
 ─────────────────────────────────────────────────────────
-STEP 5 — Store evidence and complete
+STEP 5 — Report results and complete
 ─────────────────────────────────────────────────────────
-If execution proves a finding:
-```
-store_finding(type="vulnerability", data={
-  "title": "<vuln name>",
-  "severity": "<critical|high|medium|low>",
-  "evidence": "<key output lines proving exploitability>",
-  "reproduction": "python3 /work/artifacts/<name>.py <target> <port>"
-})
-```
+Call task_complete with a summary the parent agent can include in its own summary file:
 
 task_complete(summary="Wrote <name>.py — <what it does>. \
   Saved to /work/artifacts/<name>.py. \
-  Execution result: <success/failure and key output>.")
+  Execution result: <success/failure>. \
+  Evidence: `<exact command>` → `<key output confirming impact>`.")
 
 ─────────────────────────────────────────────────────────
 RULES
